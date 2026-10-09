@@ -60,23 +60,18 @@ export const MyObservationsPage: React.FC = () => {
           alignItems: 'center',
           justifyContent: 'space-between',
           flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '24px',
+          gap: '14px',
+          marginBottom: '20px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Sparkles size={24} color="var(--brand-primary)" />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>My Personal Observations</h2>
-          </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-            Independent officer safety monitoring log. Unassigned to employees; managed directly using Open/Close.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Sparkles size={22} color="var(--brand-primary)" />
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>My Personal Observations</h2>
         </div>
 
-        <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-          <PlusCircle size={18} />
-          Log Personal Observation
+        <button className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
+          <PlusCircle size={16} />
+          Log Observation
         </button>
       </div>
 
@@ -86,18 +81,18 @@ export const MyObservationsPage: React.FC = () => {
           <Sparkles size={40} style={{ margin: '0 auto 12px', opacity: 0.3 }} />
           <h3 style={{ fontSize: '1.1rem', color: 'var(--text-primary)', marginBottom: '6px' }}>No personal observations yet</h3>
           <p style={{ fontSize: '0.85rem' }}>
-            Use this space to track workplace hazards that you manage directly without creating employee tasks.
+            Track workplace hazards that you manage directly.
           </p>
           <button
             className="btn btn-primary btn-sm"
             onClick={() => setShowCreateModal(true)}
             style={{ marginTop: '16px' }}
           >
-            Create Your First Personal Observation
+            Create Personal Observation
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(360px, 1fr))', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
           {personalObs.map((obs, index) => {
             const isOpen = obs.status === 'OPEN';
 

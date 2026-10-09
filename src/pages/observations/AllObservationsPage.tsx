@@ -217,10 +217,7 @@ export const AllObservationsPage: React.FC = () => {
         }}
       >
         <div>
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Safety Observations & Tasks</h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-            Comprehensive overview of industrial hazard reports, corrective assignments, and verification.
-          </p>
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>Safety Observations & Tasks</h2>
         </div>
 
         <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
@@ -257,7 +254,7 @@ export const AllObservationsPage: React.FC = () => {
       <div
         className="ehs-card"
         style={{
-          padding: '16px',
+          padding: '14px',
           marginBottom: '20px',
           display: 'flex',
           flexWrap: 'wrap',
@@ -275,7 +272,7 @@ export const AllObservationsPage: React.FC = () => {
           <input
             type="text"
             className="form-input"
-            placeholder="Search observation, area, employee, ID..."
+            placeholder="Search observations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ paddingLeft: '36px' }}
@@ -314,8 +311,8 @@ export const AllObservationsPage: React.FC = () => {
       </div>
 
 
-      {/* Observations Table */}
-      <div className="table-container">
+      {/* Observations Desktop Table */}
+      <div className="table-container table-desktop-view">
         <table className="ehs-table">
           <thead>
             <tr>
@@ -425,6 +422,115 @@ export const AllObservationsPage: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Observations Mobile Cards View */}
+      <div className="cards-mobile-view">
+        {filteredObservations.length === 0 ? (
+          <div className="ehs-card" style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+            No observations found matching current filters.
+          </div>
+        ) : (
+          filteredObservations.map((obs, index) => {
+            const isReviewNeeded = obs.status === 'SUBMITTED_FOR_REVIEW';
+
+            return (
+              <div
+                key={obs.id}
+                className="mobile-data-card"
+                onClick={() => openObsDetails(obs)}
+                style={{
+                  borderLeft: isReviewNeeded ? '4px solid #f59e0b' : undefined,
+                  background: isReviewNeeded ? 'rgba(245, 158, 11, 0.03)' : '#ffffff',
+                }}
+              >
+                <div className="mobile-card-row">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.9rem' }}>
+                      #{index + 1}
+                    </span>
+                    <PriorityBadge priority={obs.priority} />
+                  </div>
+                  <ObservationStatusBadge status={obs.status} />
+                </div>
+
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                  {obs.observation_text}
+                </div>
+
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Department / Area</span>
+                  <span className="mobile-card-val">
+                    {obs.department?.name || 'Plant'} • {obs.area}
+                  </span>
+                </div>
+
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Assignee</span>
+                  <span className="mobile-card-val" style={{ color: 'var(--brand-secondary)' }}>
+                    {obs.is_personal ? 'Personal Log' : (obs.assignee?.full_name || `Emp #${obs.assigned_to}`)}
+                  </span>
+                </div>
+
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Target Date</span>
+                  <span className="mobile-card-val">
+                    {obs.due_date ? formatISTDate(obs.due_date) : '—'}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}>
+                  {isReviewNeeded ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openObsDetails(obs);
+                      }}
+                      style={{
+                        background: '#f59e0b',
+                        borderColor: '#d97706',
+                        color: '#ffffff',
+                        fontWeight: 700,
+                        fontSize: '0.8rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        width: '100%',
+                        justifyContent: 'center',
+                        padding: '8px 12px',
+                      }}
+                    >
+                      <ShieldCheck size={15} />
+                      <span>Review & Approve</span>
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-outline btn-sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openObsDetails(obs);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        width: '100%',
+                        justifyContent: 'center',
+                        padding: '8px 12px',
+                      }}
+                    >
+                      <Eye size={15} />
+                      <span>View Details</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Task Detail & Admin Review Modal */}

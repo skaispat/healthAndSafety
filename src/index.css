@@ -1123,16 +1123,16 @@ textarea {
 /* Responsive Utilities & Pure Mobile Polish */
 .grid-dashboard-kpi {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-bottom: 24px;
 }
 
-@media (max-width: 480px) {
-  .grid-dashboard-kpi {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
+.grid-audit-kpi {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
 }
 
 .grid-charts {
@@ -1182,13 +1182,58 @@ textarea {
     border-radius: 10px;
   }
 
-  /* Stat cards */
+  /* 3 Cards Per Row Grid on Mobile */
+  .grid-dashboard-kpi {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  /* Stat cards compact for 3-per-row on mobile */
   .stat-card {
-    padding: 14px 16px;
+    padding: 10px 8px;
+    border-radius: 8px;
+    min-height: 80px;
+  }
+
+  .stat-card::before {
+    width: 3px;
+  }
+
+  .stat-card-title {
+    font-size: 0.68rem;
+    letter-spacing: 0;
+    gap: 4px;
+    line-height: 1.15;
+    text-transform: none;
+    font-weight: 700;
+  }
+
+  .stat-card-title span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .stat-card-title svg {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
   }
 
   .stat-card-value {
-    font-size: 1.55rem;
+    font-size: 1.25rem;
+    margin-top: 4px;
+    line-height: 1.1;
+  }
+
+  .stat-card-subtitle {
+    font-size: 0.62rem;
+    margin-top: 2px;
+    line-height: 1.15;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   /* Headers on mobile */
@@ -1209,6 +1254,35 @@ textarea {
   /* Ultra-compact header spacing */
   .page-wrapper {
     padding: 12px 10px 20px 10px;
+  }
+
+  /* 3 Cards Per Row Ultra-compact on phones */
+  .grid-dashboard-kpi {
+    gap: 6px;
+    margin-bottom: 14px;
+  }
+
+  .stat-card {
+    padding: 8px 6px;
+    min-height: 70px;
+  }
+
+  .stat-card-title {
+    font-size: 0.62rem;
+  }
+
+  .stat-card-title svg {
+    width: 12px;
+    height: 12px;
+  }
+
+  .stat-card-value {
+    font-size: 1.1rem;
+    margin-top: 3px;
+  }
+
+  .stat-card-subtitle {
+    font-size: 0.58rem;
   }
 
   /* Bottom nav touch safety */
@@ -1322,4 +1396,123 @@ textarea {
 .stage-tab-count-active {
   background: rgba(255, 255, 255, 0.25) !important;
   color: #ffffff !important;
+}
+
+/* ==========================================================================
+   TRAININGS RESPONSIVE & MOBILE PURE VIEW
+   ========================================================================== */
+.training-mobile-cards {
+  display: none;
+}
+
+.training-desktop-table {
+  display: block;
+}
+
+@media (max-width: 768px) {
+  .training-mobile-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .training-desktop-table {
+    display: none !important;
+  }
+
+  .training-card-item {
+    background: #ffffff;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: transform 0.1s ease;
+  }
+
+  .training-card-item:active {
+    background: #f8fafc;
+  }
+}
+
+/* ==========================================================================
+   UNIVERSAL MOBILE RESPONSIVE TABLE -> CARD VIEW
+   ========================================================================== */
+.table-desktop-view {
+  display: block;
+}
+
+.cards-mobile-view {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .table-desktop-view {
+    display: none !important;
+  }
+
+  .cards-mobile-view {
+    display: flex !important;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .mobile-data-card {
+    background: #ffffff;
+    border: 1px solid var(--border-subtle);
+    border-radius: 10px;
+    padding: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+  }
+
+  .mobile-data-card:active {
+    background: #f8fafc;
+  }
+
+  .mobile-card-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .mobile-card-label {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    font-weight: 500;
+  }
+
+  .mobile-card-val {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    text-align: right;
+  }
+}
+
+/* Custom Scrollbar Utility */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }

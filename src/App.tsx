@@ -14,7 +14,6 @@ import { CreateObservationPage } from './pages/observations/CreateObservationPag
 import { MyObservationsPage } from './pages/observations/MyObservationsPage';
 import { AllTasksPage } from './pages/tasks/AllTasksPage';
 import { MyTasksPage } from './pages/tasks/MyTasksPage';
-import { AwaitingReviewPage } from './pages/tasks/AwaitingReviewPage';
 import { TrainingRecordsPage } from './pages/training/TrainingRecordsPage';
 import { AddTrainingPage } from './pages/training/AddTrainingPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
@@ -50,7 +49,15 @@ const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 };
 
 export const AppRoutes: React.FC = () => {
-  const { isOfficer } = useAuth();
+  const { isOfficer, currentUser } = useAuth();
+
+  const isAdminOrOfficer = Boolean(
+    isOfficer ||
+    currentUser?.role === 'HEALTH_SAFETY_OFFICER' ||
+    currentUser?.role === 'ADMIN' ||
+    currentUser?.user_access === 'ADMIN' ||
+    (currentUser?.position && currentUser.position.trim().toUpperCase() === 'HEALTH AND SAFETY')
+  );
 
   return (
     <Routes>
@@ -103,11 +110,7 @@ export const AppRoutes: React.FC = () => {
       />
       <Route
         path="/tasks/awaiting-review"
-        element={
-          <MainLayout>
-            <AwaitingReviewPage />
-          </MainLayout>
-        }
+        element={<Navigate to="/observations?status=SUBMITTED_FOR_REVIEW" replace />}
       />
       <Route
         path="/tasks/rework"
@@ -144,12 +147,12 @@ export const AppRoutes: React.FC = () => {
         }
       />
 
-      {/* Training */}
+      {/* Training (Restricted to Safety Officer & Admin) */}
       <Route
         path="/training"
         element={
           <MainLayout>
-            <TrainingRecordsPage />
+            {isAdminOrOfficer ? <TrainingRecordsPage /> : <Navigate to="/" replace />}
           </MainLayout>
         }
       />
@@ -157,7 +160,7 @@ export const AppRoutes: React.FC = () => {
         path="/training/add"
         element={
           <MainLayout>
-            <AddTrainingPage />
+            {isAdminOrOfficer ? <AddTrainingPage /> : <Navigate to="/" replace />}
           </MainLayout>
         }
       />

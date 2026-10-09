@@ -66,14 +66,9 @@ export const NotificationsPage: React.FC = () => {
           marginBottom: '24px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <Bell size={24} color="var(--brand-primary)" />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Notification Center</h2>
-          </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-            Realtime alerts for task assignments, officer rework requests, and overdue flags for Employee #{currentUser?.emp_id}.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Bell size={22} color="var(--brand-primary)" />
+          <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>Notification Center</h2>
         </div>
 
         {unreadCount > 0 && (

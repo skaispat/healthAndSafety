@@ -10,7 +10,8 @@ import {
   BarChart3,
   Bell,
   X,
-  ShieldCheck
+  ShieldCheck,
+  GraduationCap
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -19,7 +20,15 @@ interface AppSidebarProps {
 }
 
 export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
-  const { isOfficer } = useAuth();
+  const { isOfficer, currentUser } = useAuth();
+
+  const isAdminOrOfficer = Boolean(
+    isOfficer ||
+    currentUser?.role === 'HEALTH_SAFETY_OFFICER' ||
+    currentUser?.role === 'ADMIN' ||
+    currentUser?.user_access === 'ADMIN' ||
+    (currentUser?.position && currentUser.position.trim().toUpperCase() === 'HEALTH AND SAFETY')
+  );
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     `sidebar-nav-item ${isActive ? 'sidebar-nav-item-active' : ''}`;
@@ -81,8 +90,8 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
             <span>Dashboard</span>
           </NavLink>
 
-          {isOfficer ? (
-            /* ================= OFFICER NAVIGATION ================= */
+          {isAdminOrOfficer ? (
+            /* ================= OFFICER & ADMIN NAVIGATION ================= */
             <>
               {/* 1. Create Observation Page */}
               <NavLink to="/observations/create" className={navLinkClass} onClick={onClose}>
@@ -102,10 +111,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
                 <span>My Assigned Tasks</span>
               </NavLink>
 
-              {/* 4. Pending Verification Queue */}
-              <NavLink to="/tasks/awaiting-review" className={navLinkClass} onClick={onClose}>
-                <ShieldCheck size={18} color="#f59e0b" />
-                <span>Pending Verification</span>
+              {/* 4. Safety Training Records */}
+              <NavLink to="/training" className={navLinkClass} onClick={onClose}>
+                <GraduationCap size={18} color="#0284c7" />
+                <span>Safety Training</span>
               </NavLink>
 
               {/* 5. Reports & Audits */}

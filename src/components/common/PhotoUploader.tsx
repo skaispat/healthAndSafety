@@ -1,6 +1,7 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { Camera, ImagePlus, X, AlertCircle, Eye, CheckCircle2, Loader2, ChevronLeft, ChevronRight, Cloud } from 'lucide-react';
 import { DataService } from '../../services/dataService';
+import { CameraCaptureModal } from './CameraCaptureModal';
 
 export interface UploadedPhoto {
   url: string;
@@ -14,6 +15,8 @@ interface PhotoUploaderProps {
   maxPhotos?: number;
   maxSizeBytes?: number; // default 10MB
   compact?: boolean;
+  dropzoneTitle?: string;
+  dropzoneSubtitle?: string;
 }
 
 export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
@@ -22,6 +25,8 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   maxPhotos = 10,
   maxSizeBytes = 10 * 1024 * 1024,
   compact = false,
+  dropzoneTitle,
+  dropzoneSubtitle,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -29,6 +34,26 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
   const [warningMsg, setWarningMsg] = useState<string | null>(null);
   const [uploadingCount, setUploadingCount] = useState(0);
   const [previewIndex, setPreviewIndex] = useState<number | null>(null);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+
+  const handleCameraCapture = async (file: File) => {
+    if (photos.length >= maxPhotos) {
+      setErrorMsg(`Maximum limit of ${maxPhotos} photos reached.`);
+      return;
+    }
+    setUploadingCount(1);
+    try {
+      const res = await DataService.uploadObservationPhoto(file);
+      if (res.url) {
+        onChange([...photos, { url: res.url, file_name: res.file_name, isCloud: res.isCloud }]);
+      }
+    } catch (err: any) {
+      console.error('Error uploading camera capture:', err);
+      setErrorMsg(err.message || 'Error processing captured photo.');
+    } finally {
+      setUploadingCount(0);
+    }
+  };
 
   // Close lightbox on Escape key
   useEffect(() => {
@@ -150,7 +175,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           <button
             type="button"
             className="btn btn-outline btn-sm"
-            onClick={() => cameraInputRef.current?.click()}
+            onClick={() => setIsCameraOpen(true)}
             disabled={isAtLimit || uploadingCount > 0}
             style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
             title="Take photo"
@@ -367,10 +392,10 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         >
           <ImagePlus size={36} color="var(--brand-primary)" style={{ margin: '0 auto 8px auto' }} />
           <p style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-            Click or drag & drop inspection photos here
+            {dropzoneTitle || 'Click or drag & drop inspection photos here'}
           </p>
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '4px' }}>
-            Supports multiple JPG, PNG, and WebP.
+            {dropzoneSubtitle || 'Supports multiple JPG, PNG, and WebP.'}
           </p>
         </div>
       )}
@@ -533,6 +558,14 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
           </div>
         </div>
       )}
+
+      {/* Live Camera Capture Modal with Flip */}
+      <CameraCaptureModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleCameraCapture}
+        title={dropzoneTitle || 'Capture Photo'}
+      />
     </div>
   );
 };

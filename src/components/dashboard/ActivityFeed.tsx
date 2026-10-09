@@ -28,63 +28,81 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, onSelect
   };
 
   return (
-    <div className="ehs-card">
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
-        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div className="ehs-card" style={{ display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexShrink: 0 }}>
+        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '8px', margin: 0 }}>
           <Activity size={18} color="var(--brand-primary)" />
           Recent Safety Activity & Audit Stream
         </h4>
-        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Realtime Log</span>
+        <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+          {activities.length > 0 ? `${activities.length} logs` : 'Realtime Log'}
+        </span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-        {activities.slice(0, 8).map((act) => (
-          <div
-            key={act.id}
-            onClick={() => onSelectTask(act.task_id)}
-            style={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: '12px',
-              padding: '10px 12px',
-              borderRadius: '8px',
-              background: 'var(--bg-surface-elevated)',
-              border: '1px solid var(--border-subtle)',
-              cursor: 'pointer',
-              transition: 'all 0.15s ease',
-            }}
-            onMouseEnter={(e) => {
-              e.currentTarget.style.background = '#ffffff';
-              e.currentTarget.style.borderColor = 'var(--border-hover)';
-            }}
-            onMouseLeave={(e) => {
-              e.currentTarget.style.background = 'var(--bg-surface-elevated)';
-              e.currentTarget.style.borderColor = 'var(--border-subtle)';
-            }}
-          >
+      <div
+        className="custom-scrollbar"
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+          maxHeight: '380px',
+          overflowY: 'auto',
+          paddingRight: '6px',
+        }}
+      >
+        {activities.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '32px 10px', color: 'var(--text-muted)', fontSize: '0.85rem' }}>
+            No recent activity recorded.
+          </div>
+        ) : (
+          activities.map((act) => (
             <div
+              key={act.id}
+              onClick={() => onSelectTask(act.task_id)}
               style={{
-                padding: '6px',
-                borderRadius: '6px',
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: '12px',
+                padding: '10px 12px',
+                borderRadius: '8px',
                 background: 'var(--bg-surface-elevated)',
-                flexShrink: 0,
-                marginTop: '2px',
+                border: '1px solid var(--border-subtle)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#ffffff';
+                e.currentTarget.style.borderColor = 'var(--border-hover)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'var(--bg-surface-elevated)';
+                e.currentTarget.style.borderColor = 'var(--border-subtle)';
               }}
             >
-              {getIcon(act.action_type)}
-            </div>
+              <div
+                style={{
+                  padding: '6px',
+                  borderRadius: '6px',
+                  background: 'var(--bg-surface-elevated)',
+                  flexShrink: 0,
+                  marginTop: '2px',
+                }}
+              >
+                {getIcon(act.action_type)}
+              </div>
 
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: '0.825rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>
-                {act.description}
-              </div>
-              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                {new Date(act.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} •{' '}
-                {new Date(act.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: '0.825rem', color: 'var(--text-primary)', lineHeight: 1.4 }}>
+                  {act.description}
+                </div>
+                <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '3px' }}>
+                  {new Date(act.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} •{' '}
+                  {new Date(act.created_at).toLocaleDateString([], { month: 'short', day: 'numeric' })}
+                </div>
               </div>
             </div>
-          </div>
-        ))}
+          ))
+        )}
       </div>
     </div>
   );

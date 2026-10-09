@@ -1316,49 +1316,202 @@ export const DataService = {
   },
 
   // -------------------------------------------------------------
-  // SAFETY TRAINING RECORDS (ISO compliance)
+  // SAFETY TRAINING RECORDS (Single Table Schema)
   // -------------------------------------------------------------
   async getTrainingRecords(): Promise<TrainingRecord[]> {
-    return getStored<TrainingRecord[]>(STORAGE_KEYS.TRAINING_RECORDS, []);
+    let rawTrainings: any[] = [];
+
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { data, error } = await supabase
+          .from('trainings')
+          .select('*')
+          .order('training_date', { ascending: false });
+
+        if (!error && data && data.length > 0) {
+          rawTrainings = data;
+        } else if (error) {
+          console.warn('Supabase getTrainingRecords error:', error.message);
+        }
+      } catch (err) {
+        console.warn('Supabase getTrainingRecords exception:', err);
+      }
+    }
+
+    if (rawTrainings.length === 0) {
+      rawTrainings = getStored<TrainingRecord[]>(STORAGE_KEYS.TRAINING_RECORDS, []);
+    }
+
+    const depts = await this.getDepartments();
+    const users = await this.getUsers();
+
+    return rawTrainings.map((t: any, idx: number) => {
+      const deptIdNum = Number(t.dept_id || t.department_id);
+      const matchedDept = depts.find(d => d.dept_id === deptIdNum || d.id === String(deptIdNum));
+      const conductedByIdNum = Number(t.conducted_by || t.created_by);
+      const matchedTrainer = users.find(u => u.emp_id === conductedByIdNum || u.id === String(conductedByIdNum));
+
+      // Parse training_photos and attendance_photos JSONB columns
+      const rawGroup = (Array.isArray(t.training_photos) ? t.training_photos : (t.group_photos || []));
+      const rawAttendance = (Array.isArray(t.attendance_photos) ? t.attendance_photos : []);
+
+      const groupPhotos = rawGroup.map((p: any, pIdx: number) => ({
+        id: p.id || `tp-grp-${t.id}-${pIdx}`,
+        training_id: t.id,
+        photo_url: p.url || p.photo_url,
+        file_name: p.file_name || `group_photo_${pIdx + 1}.jpg`,
+        photo_type: 'GROUP' as const,
+        created_at: t.created_at,
+      }));
+
+      const attendancePhotos = rawAttendance.map((p: any, pIdx: number) => ({
+        id: p.id || `tp-att-${t.id}-${pIdx}`,
+        training_id: t.id,
+        photo_url: p.url || p.photo_url,
+        file_name: p.file_name || `attendance_sheet_${pIdx + 1}.jpg`,
+        photo_type: 'ATTENDANCE' as const,
+        created_at: t.created_at,
+      }));
+
+      const allPhotos = [...groupPhotos, ...attendancePhotos];
+      const trainingNum = t.training_number || `TRN-${new Date(t.training_date || t.created_at || Date.now()).getFullYear()}-${String(rawTrainings.length - idx).padStart(3, '0')}`;
+
+      return {
+        id: t.id,
+        training_number: trainingNum,
+        created_by: conductedByIdNum,
+        dept_id: deptIdNum,
+        department_id: String(deptIdNum),
+        area: t.area || 'Plant Area',
+        training_topic: t.training_topic,
+        description: t.description || '',
+        number_of_persons: Number(t.number_of_persons || 0),
+        training_date: t.training_date,
+        conducted_by: matchedTrainer?.full_name || (typeof t.conducted_by === 'string' ? t.conducted_by : 'Safety Officer'),
+        status: 'COMPLETED',
+        created_at: t.created_at,
+        updated_at: t.updated_at || t.created_at,
+        department: matchedDept,
+        creator: matchedTrainer,
+        photos: allPhotos,
+        group_photos: groupPhotos,
+        attendance_photos: attendancePhotos,
+      };
+    });
   },
 
   async createTrainingRecord(params: {
-    department_id: string;
-    number_of_persons: number;
+    department_id: string | number;
+    area: string;
     training_topic: string;
     description: string;
+    number_of_persons: number;
     training_date: string;
-    photos: { url: string; file_name: string }[];
+    conducted_by?: string | number;
+    group_photos?: { url: string; file_name?: string }[];
+    attendance_photos?: { url: string; file_name?: string }[];
+    photos?: { url: string; file_name?: string }[];
     officer_id: string | number;
   }): Promise<TrainingRecord> {
-    const records = getStored<TrainingRecord[]>(STORAGE_KEYS.TRAINING_RECORDS, []);
+    const existing = await this.getTrainingRecords();
     const now = new Date().toISOString();
     const trainingId = crypto.randomUUID();
-    const trainingNumber = `TRN-2026-${String(records.length + 1).padStart(3, '0')}`;
+    const trainingNumber = `TRN-${new Date().getFullYear()}-${String(existing.length + 1).padStart(3, '0')}`;
+    const deptIdNum = Number(params.department_id);
+    const officerIdNum = Number(params.officer_id);
+
+    const depts = await this.getDepartments();
+    const users = await this.getUsers();
+    const matchedDept = depts.find(d => d.dept_id === deptIdNum || d.id === String(deptIdNum));
+    const trainerUser = users.find(u => u.emp_id === officerIdNum || u.id === String(officerIdNum));
+
+    // Prepare group photos and attendance photos
+    const rawGroup = params.group_photos || params.photos || [];
+    const groupPhotoItems = rawGroup.map((p, idx) => ({
+      id: `tp-grp-${Date.now()}-${idx}`,
+      training_id: trainingId,
+      photo_url: p.url,
+      file_name: p.file_name || `group_photo_${idx + 1}.jpg`,
+      photo_type: 'GROUP' as const,
+      uploaded_by: officerIdNum,
+      created_at: now,
+    }));
+
+    const rawAttendance = params.attendance_photos || [];
+    const attendancePhotoItems = rawAttendance.map((p, idx) => ({
+      id: `tp-att-${Date.now()}-${idx}`,
+      training_id: trainingId,
+      photo_url: p.url,
+      file_name: p.file_name || `attendance_sheet_${idx + 1}.jpg`,
+      photo_type: 'ATTENDANCE' as const,
+      uploaded_by: officerIdNum,
+      created_at: now,
+    }));
+
+    const allPhotoItems = [...groupPhotoItems, ...attendancePhotoItems];
+
+    const groupJson = groupPhotoItems.map(p => ({ url: p.photo_url, file_name: p.file_name }));
+    const attJson = attendancePhotoItems.map(p => ({ url: p.photo_url, file_name: p.file_name }));
 
     const newRecord: TrainingRecord = {
       id: trainingId,
       training_number: trainingNumber,
-      created_by: Number(params.officer_id),
-      department_id: params.department_id,
-      dept_id: Number(params.department_id),
-      number_of_persons: params.number_of_persons,
-      training_topic: params.training_topic,
-      description: params.description,
+      created_by: officerIdNum,
+      dept_id: deptIdNum,
+      department_id: String(deptIdNum),
+      area: params.area.trim(),
+      training_topic: params.training_topic.trim(),
+      description: params.description.trim(),
+      number_of_persons: Number(params.number_of_persons),
       training_date: params.training_date,
+      conducted_by: trainerUser?.full_name || 'Safety Officer',
+      status: 'COMPLETED',
       created_at: now,
       updated_at: now,
-      photos: params.photos.map((p, idx) => ({
-        id: `tp-${Date.now()}-${idx}`,
-        training_id: trainingId,
-        photo_url: p.url,
-        file_name: p.file_name,
-        uploaded_by: Number(params.officer_id),
-        created_at: now
-      }))
+      department: matchedDept,
+      creator: trainerUser,
+      photos: allPhotoItems,
+      group_photos: groupPhotoItems,
+      attendance_photos: attendancePhotoItems,
     };
 
-    setStored(STORAGE_KEYS.TRAINING_RECORDS, [newRecord, ...records]);
+    // 1. Single Table insert to public.trainings
+    if (isSupabaseConfigured() && supabase) {
+      try {
+        const { error: insertError } = await supabase.from('trainings').insert([{
+          id: trainingId,
+          dept_id: deptIdNum,
+          area: newRecord.area,
+          training_topic: newRecord.training_topic,
+          description: newRecord.description,
+          number_of_persons: newRecord.number_of_persons,
+          training_date: newRecord.training_date,
+          conducted_by: officerIdNum,
+          training_photos: groupJson,
+          attendance_photos: attJson,
+          created_at: now,
+          updated_at: now,
+        }]);
+
+        if (insertError) {
+          console.warn('Supabase training insert warning:', insertError.message);
+        }
+      } catch (err) {
+        console.warn('Supabase training insert exception:', err);
+      }
+    }
+
+    // 2. Save in localStorage for instant offline access and UI reactivity
+    const currentLocal = getStored<any[]>(STORAGE_KEYS.TRAINING_RECORDS, []);
+    setStored(STORAGE_KEYS.TRAINING_RECORDS, [
+      {
+        ...newRecord,
+        training_photos: groupJson,
+        attendance_photos: attJson,
+      },
+      ...currentLocal,
+    ]);
+
     return newRecord;
   },
 

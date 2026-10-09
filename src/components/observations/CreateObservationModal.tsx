@@ -25,26 +25,25 @@ interface CreateObservationModalProps {
   onCreated: () => void;
 }
 
-const ModalStepHeader: React.FC<{ step: number; title: string; subtitle?: string; icon: React.ReactNode }> = ({
+const ModalStepHeader: React.FC<{ step: number; title: string; icon: React.ReactNode }> = ({
   step,
   title,
-  subtitle,
   icon,
 }) => (
   <div
     style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '10px',
-      marginBottom: '12px',
-      paddingBottom: '8px',
+      gap: '8px',
+      marginBottom: '10px',
+      paddingBottom: '6px',
       borderBottom: '1px solid var(--border-subtle)',
     }}
   >
     <div
       style={{
-        width: '26px',
-        height: '26px',
+        width: '24px',
+        height: '24px',
         borderRadius: '6px',
         background: 'rgba(2, 132, 199, 0.1)',
         color: 'var(--brand-primary)',
@@ -52,24 +51,17 @@ const ModalStepHeader: React.FC<{ step: number; title: string; subtitle?: string
         alignItems: 'center',
         justifyContent: 'center',
         fontWeight: 800,
-        fontSize: '0.8rem',
+        fontSize: '0.78rem',
         flexShrink: 0,
       }}
     >
       {step}
     </div>
-    <div style={{ flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-        <span style={{ color: 'var(--brand-primary)' }}>{icon}</span>
-        <h4 style={{ fontSize: '0.925rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-          {title}
-        </h4>
-      </div>
-      {subtitle && (
-        <p style={{ fontSize: '0.74rem', color: 'var(--text-muted)', margin: '1px 0 0 0' }}>
-          {subtitle}
-        </p>
-      )}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+      <span style={{ color: 'var(--brand-primary)' }}>{icon}</span>
+      <h4 style={{ fontSize: '0.9rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+        {title}
+      </h4>
     </div>
   </div>
 );
@@ -224,7 +216,6 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
             <ModalStepHeader
               step={1}
               title="Department & Plant Location"
-              subtitle="Identify department and pinpoint exact machinery or bay"
               icon={<Building2 size={16} />}
             />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
@@ -253,7 +244,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Compressor Bay 4, Warehouse Aisle 3"
+                  placeholder="e.g. Compressor Bay 4"
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
                   required
@@ -267,7 +258,6 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
             <ModalStepHeader
               step={2}
               title="Risk Assessment & Priority"
-              subtitle="Severity level automatically calculates safety risk factor"
               icon={<AlertTriangle size={16} />}
             />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', alignItems: 'center' }}>
@@ -281,9 +271,9 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
                   onChange={(e) => setPriority(e.target.value as PriorityLevel)}
                   required
                 >
-                  <option value="LOW">LOW — Minor hazard or housekeeping</option>
-                  <option value="MEDIUM">MEDIUM — Moderate risk requiring timely repair</option>
-                  <option value="HIGH">HIGH — Critical hazard or imminent danger</option>
+                  <option value="LOW">LOW (1% – 3%)</option>
+                  <option value="MEDIUM">MEDIUM (3% – 6%)</option>
+                  <option value="HIGH">HIGH (6% – 9%)</option>
                 </select>
               </div>
 
@@ -311,8 +301,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
           <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '16px' }}>
             <ModalStepHeader
               step={3}
-              title="Safety Hazard Observation & Solution Directive"
-              subtitle="Detailed description of unsafe condition and recommended fix"
+              title="Hazard & Corrective Directive"
               icon={<FileText size={16} />}
             />
             <div className="form-group" style={{ marginBottom: '12px' }}>
@@ -322,7 +311,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
               <textarea
                 className="form-textarea"
                 rows={3}
-                placeholder="Describe the unsafe condition or hazard observed in detail..."
+                placeholder="Describe unsafe condition..."
                 value={observationText}
                 onChange={(e) => setObservationText(e.target.value)}
                 required
@@ -330,11 +319,11 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Recommended Corrective Solution Directive</label>
+              <label className="form-label">Recommended Action</label>
               <textarea
                 className="form-textarea"
                 rows={2}
-                placeholder="Specify recommended corrective engineering or containment action..."
+                placeholder="Recommended action or fix..."
                 value={solutionText}
                 onChange={(e) => setSolutionText(e.target.value)}
               />
@@ -345,8 +334,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
           <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '16px' }}>
             <ModalStepHeader
               step={4}
-              title="Task Assignment & Target Due Date"
-              subtitle="Filtered to active employees within the selected plant department"
+              title="Task Assignment & Due Date"
               icon={<UserIcon size={16} />}
             />
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
@@ -373,9 +361,6 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
                       </option>
                     ))}
                 </select>
-                <span className="form-hint" style={{ fontSize: '0.75rem' }}>
-                  {filteredEmployees.length} employee(s) in selected department.
-                </span>
               </div>
 
               <div className="form-group">
@@ -397,8 +382,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
           <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px' }}>
             <ModalStepHeader
               step={5}
-              title="Initial Photographic Evidence"
-              subtitle="Visual proof of hazard condition before work order is initiated"
+              title="Hazard Condition Photos"
               icon={<Camera size={16} />}
             />
             <PhotoUploader photos={photos} onChange={setPhotos} maxPhotos={10} />

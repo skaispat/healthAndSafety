@@ -146,126 +146,7 @@ export const MyTasksPage: React.FC = () => {
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>
               {!isUserRole ? 'Officer Tasks & Verification' : 'My Assigned Tasks'}
             </h2>
-            <span
-              className="badge badge-assigned"
-              style={{ fontSize: '0.725rem', padding: '2px 9px', borderRadius: '999px', fontWeight: 700 }}
-            >
-              Emp ID: {currentEmpId}
-            </span>
           </div>
-
-          {!isUserRole && (
-            <div
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                background: 'var(--bg-surface-elevated)',
-                border: '1px solid var(--border-subtle)',
-                borderRadius: '8px',
-                padding: '3px',
-                gap: '4px',
-                marginTop: '10px',
-              }}
-            >
-              <button
-                type="button"
-                onClick={() => setOfficerScope('MINE')}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  fontSize: '0.78rem',
-                  fontWeight: officerScope === 'MINE' ? 700 : 500,
-                  border: 'none',
-                  background: officerScope === 'MINE' ? 'var(--brand-primary)' : 'transparent',
-                  color: officerScope === 'MINE' ? '#ffffff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span>My Assigned</span>
-                <span
-                  style={{
-                    fontSize: '0.7rem',
-                    padding: '1px 6px',
-                    borderRadius: '999px',
-                    background: officerScope === 'MINE' ? 'rgba(255,255,255,0.25)' : 'var(--border-subtle)',
-                    color: officerScope === 'MINE' ? '#ffffff' : 'var(--text-muted)',
-                  }}
-                >
-                  {userAssignedCount}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setOfficerScope('VERIFICATION');
-                  setFilter('ALL');
-                }}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  fontSize: '0.78rem',
-                  fontWeight: officerScope === 'VERIFICATION' ? 700 : 500,
-                  border: 'none',
-                  background: officerScope === 'VERIFICATION' ? '#f59e0b' : 'transparent',
-                  color: officerScope === 'VERIFICATION' ? '#ffffff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <ShieldCheck size={13} />
-                <span>Pending Verification</span>
-                <span
-                  style={{
-                    fontSize: '0.7rem',
-                    padding: '1px 6px',
-                    borderRadius: '999px',
-                    background: officerScope === 'VERIFICATION' ? 'rgba(255,255,255,0.3)' : 'rgba(245, 158, 11, 0.15)',
-                    color: officerScope === 'VERIFICATION' ? '#ffffff' : '#b45309',
-                    fontWeight: 700,
-                  }}
-                >
-                  {verificationCount}
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setOfficerScope('ALL')}
-                style={{
-                  padding: '5px 12px',
-                  borderRadius: '6px',
-                  fontSize: '0.78rem',
-                  fontWeight: officerScope === 'ALL' ? 700 : 500,
-                  border: 'none',
-                  background: officerScope === 'ALL' ? 'var(--brand-primary)' : 'transparent',
-                  color: officerScope === 'ALL' ? '#ffffff' : 'var(--text-secondary)',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '6px',
-                }}
-              >
-                <span>All Plant Tasks</span>
-                <span
-                  style={{
-                    fontSize: '0.7rem',
-                    padding: '1px 6px',
-                    borderRadius: '999px',
-                    background: officerScope === 'ALL' ? 'rgba(255,255,255,0.25)' : 'var(--border-subtle)',
-                    color: officerScope === 'ALL' ? '#ffffff' : 'var(--text-muted)',
-                  }}
-                >
-                  {allTasksCount}
-                </span>
-              </button>
-            </div>
-          )}
         </div>
 
         {/* Top Actions */}
@@ -373,148 +254,256 @@ export const MyTasksPage: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div className="table-container">
-          <table className="ehs-table">
-            <thead>
-              <tr>
-                <th style={{ width: '70px' }}>Sr No</th>
-                <th>Observation & Task</th>
-                <th>Department & Area</th>
-                <th>Priority</th>
-                <th>Due Date</th>
-                <th>Status</th>
-                <th style={{ textAlign: 'right' }}>Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredTasks.map((task, index) => {
-                const isPastDue = new Date(task.due_date).getTime() < Date.now();
-                const isOverdue = isPastDue && task.status !== 'COMPLETED' && task.status !== 'CLOSED';
-                const isPendingVerification = task.status === 'SUBMITTED_FOR_REVIEW';
+        <>
+          <div className="table-container table-desktop-view">
+            <table className="ehs-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '70px' }}>Sr No</th>
+                  <th>Observation & Task</th>
+                  <th>Department & Area</th>
+                  <th>Priority</th>
+                  <th>Due Date</th>
+                  <th>Status</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredTasks.map((task, index) => {
+                  const isPastDue = new Date(task.due_date).getTime() < Date.now();
+                  const isOverdue = isPastDue && task.status !== 'COMPLETED' && task.status !== 'CLOSED';
+                  const isPendingVerification = task.status === 'SUBMITTED_FOR_REVIEW';
 
-                return (
-                  <tr
-                    key={task.id}
-                    onClick={() => setSelectedTask(task)}
-                    style={{
-                      cursor: 'pointer',
-                      background: isOverdue
-                        ? 'rgba(239, 68, 68, 0.04)'
-                        : (isPendingVerification ? 'rgba(245, 158, 11, 0.05)' : undefined),
-                      borderLeft: isPendingVerification ? '4px solid #f59e0b' : undefined,
-                    }}
-                  >
-                    {/* Sr No */}
-                    <td style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        {isOverdue && <AlertTriangle size={14} color="#ef4444" />}
-                        <span>{index + 1}</span>
-                      </div>
-                    </td>
-
-                    {/* Observation & Task */}
-                    <td style={{ maxWidth: '320px' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                        {(() => {
-                          const obsPhotos = task.observation?.photos || (task.observation as any)?.all_photos || task.photos || [];
-                          const p = obsPhotos[0];
-                          const thumbUrl = p ? (p.photo_url || p.url || (typeof p === 'string' ? p : null)) : null;
-                          if (!thumbUrl) return null;
-                          return (
-                            <img
-                              src={thumbUrl}
-                              alt="Observation Thumbnail"
-                              style={{
-                                width: '38px',
-                                height: '38px',
-                                borderRadius: '6px',
-                                objectFit: 'cover',
-                                flexShrink: 0,
-                                border: '1px solid var(--border-subtle)',
-                              }}
-                            />
-                          );
-                        })()}
-                        <div style={{ minWidth: 0, flex: 1 }}>
-                          <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                            {task.observation?.observation_text?.split('\n')[0] || task.observation?.area || 'Safety Task'}
-                          </div>
-                          {task.observation?.observation_text && (
-                            <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {task.observation.observation_text}
-                            </div>
-                          )}
+                  return (
+                    <tr
+                      key={task.id}
+                      onClick={() => setSelectedTask(task)}
+                      style={{
+                        cursor: 'pointer',
+                        background: isOverdue
+                          ? 'rgba(239, 68, 68, 0.04)'
+                          : (isPendingVerification ? 'rgba(245, 158, 11, 0.05)' : undefined),
+                        borderLeft: isPendingVerification ? '4px solid #f59e0b' : undefined,
+                      }}
+                    >
+                      {/* Sr No */}
+                      <td style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          {isOverdue && <AlertTriangle size={14} color="#ef4444" />}
+                          <span>{index + 1}</span>
                         </div>
-                      </div>
-                    </td>
+                      </td>
 
-                    {/* Department & Area */}
-                    <td>
-                      <div style={{ fontWeight: 600 }}>
-                        {task.observation?.department?.name || 'Plant'}
-                      </div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                        {task.observation?.area || 'Plant Site'}
-                      </div>
-                    </td>
+                      {/* Observation & Task */}
+                      <td style={{ maxWidth: '320px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                          {(() => {
+                            const obsPhotos = task.observation?.photos || (task.observation as any)?.all_photos || task.photos || [];
+                            const p = obsPhotos[0];
+                            const thumbUrl = p ? (p.photo_url || p.url || (typeof p === 'string' ? p : null)) : null;
+                            if (!thumbUrl) return null;
+                            return (
+                              <img
+                                src={thumbUrl}
+                                alt="Observation Thumbnail"
+                                style={{
+                                  width: '38px',
+                                  height: '38px',
+                                  borderRadius: '6px',
+                                  objectFit: 'cover',
+                                  flexShrink: 0,
+                                  border: '1px solid var(--border-subtle)',
+                                }}
+                              />
+                            );
+                          })()}
+                          <div style={{ minWidth: 0, flex: 1 }}>
+                            <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {task.observation?.observation_text?.split('\n')[0] || task.observation?.area || 'Safety Task'}
+                            </div>
+                            {task.observation?.observation_text && (
+                              <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {task.observation.observation_text}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </td>
 
-                    {/* Priority */}
-                    <td>
+                      {/* Department & Area */}
+                      <td>
+                        <div style={{ fontWeight: 600 }}>
+                          {task.observation?.department?.name || 'Plant'}
+                        </div>
+                        <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                          {task.observation?.area || 'Plant Site'}
+                        </div>
+                      </td>
+
+                      {/* Priority */}
+                      <td>
+                        <PriorityBadge priority={task.observation?.priority || 'MEDIUM'} showRisk={false} />
+                      </td>
+
+                      {/* Due Date */}
+                      <td style={{ fontSize: '0.8rem', color: isOverdue ? '#ef4444' : 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: isOverdue ? 700 : 500 }}>
+                        {formatISTDate(task.due_date)}
+                      </td>
+
+                      {/* Status */}
+                      <td>
+                        <StatusBadge status={task.status} />
+                      </td>
+
+                      {/* Action */}
+                      <td style={{ textAlign: 'right' }}>
+                        {!isUserRole && isPendingVerification ? (
+                          <button
+                            type="button"
+                            className="btn btn-warning btn-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTask(task);
+                            }}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '5px',
+                              fontWeight: 700,
+                              padding: '4px 10px',
+                              fontSize: '0.76rem',
+                            }}
+                          >
+                            <ShieldCheck size={13} />
+                            <span>Inspect & Verify →</span>
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            className="btn-ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedTask(task);
+                            }}
+                            style={{ fontSize: '0.78rem', color: 'var(--brand-primary)', fontWeight: 700 }}
+                          >
+                            {!isUserRole ? 'View Details →' : 'Update Task →'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile Cards View */}
+          <div className="cards-mobile-view">
+            {filteredTasks.map((task, index) => {
+              const isPastDue = new Date(task.due_date).getTime() < Date.now();
+              const isOverdue = isPastDue && task.status !== 'COMPLETED' && task.status !== 'CLOSED';
+              const isPendingVerification = task.status === 'SUBMITTED_FOR_REVIEW';
+
+              return (
+                <div
+                  key={task.id}
+                  className="mobile-data-card"
+                  onClick={() => setSelectedTask(task)}
+                  style={{
+                    borderLeft: isPendingVerification
+                      ? '4px solid #f59e0b'
+                      : isOverdue
+                        ? '4px solid #ef4444'
+                        : undefined,
+                    background: isPendingVerification
+                      ? 'rgba(245, 158, 11, 0.03)'
+                      : isOverdue
+                        ? 'rgba(239, 68, 68, 0.03)'
+                        : '#ffffff',
+                  }}
+                >
+                  <div className="mobile-card-row">
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {isOverdue && <AlertTriangle size={15} color="#ef4444" />}
+                      <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.88rem' }}>
+                        #{index + 1} • {task.task_number}
+                      </span>
                       <PriorityBadge priority={task.observation?.priority || 'MEDIUM'} showRisk={false} />
-                    </td>
+                    </div>
+                    <StatusBadge status={task.status} />
+                  </div>
 
-                    {/* Due Date */}
-                    <td style={{ fontSize: '0.8rem', color: isOverdue ? '#ef4444' : 'var(--text-muted)', whiteSpace: 'nowrap', fontWeight: isOverdue ? 700 : 500 }}>
-                      {formatISTDate(task.due_date)}
-                    </td>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                    {task.observation?.observation_text?.split('\n')[0] || task.observation?.area || 'Safety Task'}
+                  </div>
 
-                    {/* Status */}
-                    <td>
-                      <StatusBadge status={task.status} />
-                    </td>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Department / Area</span>
+                    <span className="mobile-card-val">
+                      {task.observation?.department?.name || 'Plant'} • {task.observation?.area || 'Site'}
+                    </span>
+                  </div>
 
-                    {/* Action */}
-                    <td style={{ textAlign: 'right' }}>
-                      {!isUserRole && isPendingVerification ? (
-                        <button
-                          type="button"
-                          className="btn btn-warning btn-xs"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTask(task);
-                          }}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '5px',
-                            fontWeight: 700,
-                            padding: '4px 10px',
-                            fontSize: '0.76rem',
-                          }}
-                        >
-                          <ShieldCheck size={13} />
-                          <span>Inspect & Verify →</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn-ghost"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedTask(task);
-                          }}
-                          style={{ fontSize: '0.78rem', color: 'var(--brand-primary)', fontWeight: 700 }}
-                        >
-                          {!isUserRole ? 'View Details →' : 'Update Task →'}
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                  <div className="mobile-card-row">
+                    <span className="mobile-card-label">Target Date</span>
+                    <span
+                      className="mobile-card-val"
+                      style={{ color: isOverdue ? '#ef4444' : 'var(--text-muted)', fontWeight: isOverdue ? 700 : 500 }}
+                    >
+                      {formatISTDate(task.due_date)} {isOverdue ? '(Overdue)' : ''}
+                    </span>
+                  </div>
+
+                  <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}>
+                    {!isUserRole && isPendingVerification ? (
+                      <button
+                        type="button"
+                        className="btn btn-warning btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTask(task);
+                        }}
+                        style={{
+                          width: '100%',
+                          justifyContent: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 700,
+                          padding: '8px 12px',
+                        }}
+                      >
+                        <ShieldCheck size={15} />
+                        <span>Inspect & Verify →</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className="btn-outline btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedTask(task);
+                        }}
+                        style={{
+                          width: '100%',
+                          justifyContent: 'center',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontWeight: 700,
+                          padding: '8px 12px',
+                        }}
+                      >
+                        <span>{!isUserRole ? 'View Details →' : 'Update Task →'}</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
       )}
 
       {/* Modals */}

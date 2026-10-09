@@ -254,6 +254,7 @@ export interface TrainingPhoto {
   training_id: string;
   photo_url: string;
   file_name?: string;
+  photo_type?: 'GROUP' | 'ATTENDANCE';
   uploaded_by?: number | string;
   created_at: string;
 }
@@ -264,10 +265,13 @@ export interface TrainingRecord {
   created_by: number | string;
   department_id: string;
   dept_id?: number;
-  number_of_persons: number;
+  area: string;
   training_topic: string;
   description: string;
+  number_of_persons: number;
   training_date: string;
+  conducted_by: string;
+  status?: string;
   created_at: string;
   updated_at: string;
 
@@ -275,6 +279,8 @@ export interface TrainingRecord {
   department?: Department;
   creator?: User;
   photos?: TrainingPhoto[];
+  group_photos?: TrainingPhoto[];
+  attendance_photos?: TrainingPhoto[];
 }
 
 // Priority to Risk Mapping constant

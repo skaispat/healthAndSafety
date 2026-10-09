@@ -20,6 +20,7 @@ import {
   AlertTriangle,
   GraduationCap,
   Users,
+  Building2,
   ShieldAlert,
   PlusCircle,
   Sparkles,
@@ -112,26 +113,15 @@ export const DashboardPage: React.FC = () => {
           }}
         >
           <div>
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-primary)' }}>
+            <h2 style={{ fontSize: '1.4rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
               Health & Safety Dashboard
             </h2>
-            <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-              Realtime workplace hazard monitoring, corrective actions, and regulatory audit compliance.
-            </p>
           </div>
 
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            {/* <button className="btn btn-outline btn-sm" onClick={() => setShowPersonalObs(true)}>
-              <Sparkles size={16} color="var(--brand-primary)" />
-              Personal Observation
-            </button>
-            <button className="btn btn-outline btn-sm" onClick={() => setShowCreateTraining(true)}>
-              <GraduationCap size={16} color="#38bdf8" />
-              Log Training
-            </button> */}
             <button className="btn btn-primary btn-sm" onClick={() => setShowCreateObs(true)}>
               <PlusCircle size={16} />
-              Create Observation & Assign Task
+              Create Observation
             </button>
           </div>
         </div>
@@ -149,7 +139,6 @@ export const DashboardPage: React.FC = () => {
           <StatCard
             title="Active Tasks"
             value={stats.activeTasks || 0}
-            subtitle="In progress / assigned"
             icon={<CheckSquare size={20} />}
             accentColor="#38bdf8"
             onClick={() => navigate('/observations?status=PENDING')}
@@ -157,7 +146,6 @@ export const DashboardPage: React.FC = () => {
           <StatCard
             title="Awaiting Review"
             value={stats.awaitingReview || 0}
-            subtitle="Pending officer inspection"
             icon={<Clock size={20} />}
             accentColor="#fbbf24"
             onClick={() => navigate('/observations?status=SUBMITTED_FOR_REVIEW')}
@@ -165,7 +153,6 @@ export const DashboardPage: React.FC = () => {
           <StatCard
             title="Rework Required"
             value={stats.reworkRequired || 0}
-            subtitle="Sent back for correction"
             icon={<RotateCcw size={20} />}
             accentColor="#f97316"
             onClick={() => navigate('/observations?status=REWORK_REQUIRED')}
@@ -173,7 +160,6 @@ export const DashboardPage: React.FC = () => {
           <StatCard
             title="Overdue Tasks"
             value={stats.overdueTasks || 0}
-            subtitle="Immediate escalation required"
             icon={<AlertTriangle size={20} />}
             accentColor="#ef4444"
             onClick={() => navigate('/observations?status=OVERDUE')}
@@ -181,14 +167,12 @@ export const DashboardPage: React.FC = () => {
           <StatCard
             title="High Risk Hazards"
             value={stats.highRisk || 0}
-            subtitle="Auto-assessed 6% – 9%"
             icon={<ShieldAlert size={20} />}
             accentColor="#ef4444"
           />
           <StatCard
             title="Completed Tasks"
             value={stats.completedTasks || 0}
-            subtitle="Verified by safety officer"
             icon={<CheckCircle2 size={20} />}
             accentColor="#10b981"
             onClick={() => navigate('/observations?status=COMPLETED')}
@@ -196,10 +180,16 @@ export const DashboardPage: React.FC = () => {
           <StatCard
             title="Safety Training"
             value={stats.trainingSessions || 0}
-            subtitle={`${stats.peopleTrained || 0} Workers Certified`}
+            subtitle={`${stats.peopleTrained || 0} Trained`}
             icon={<GraduationCap size={20} />}
             accentColor="#8b5cf6"
             onClick={() => navigate('/training')}
+          />
+          <StatCard
+            title="Plant Departments"
+            value={departments.length || 0}
+            icon={<Building2 size={20} />}
+            accentColor="#64748b"
           />
         </div>
 
@@ -327,19 +317,22 @@ export const DashboardPage: React.FC = () => {
   return (
     <div className="page-wrapper">
       {/* Employee Welcome */}
-      <div style={{ marginBottom: '24px' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Employee Safety Portal</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-          Welcome, {currentUser?.full_name}. View assigned safety work orders and submit corrective evidence.
-        </p>
+      <div style={{ marginBottom: '20px' }}>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>Employee Safety Portal</h2>
       </div>
 
       {/* Employee KPI Cards */}
       <div className="grid-dashboard-kpi">
         <StatCard
+          title="Total Assigned"
+          value={myTasks.length || 0}
+          icon={<Users size={20} />}
+          accentColor="#64748b"
+          onClick={() => navigate('/my-tasks')}
+        />
+        <StatCard
           title="My Active Tasks"
           value={stats.activeTasks || 0}
-          subtitle="Assigned or in progress"
           icon={<CheckSquare size={20} />}
           accentColor="#38bdf8"
           onClick={() => navigate('/my-tasks?filter=ACTIVE')}
@@ -347,7 +340,6 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           title="Rework Required"
           value={stats.reworkRequired || 0}
-          subtitle="Officer requested adjustments"
           icon={<RotateCcw size={20} />}
           accentColor="#f97316"
           onClick={() => navigate('/my-tasks?filter=REWORK_REQUIRED')}
@@ -355,7 +347,6 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           title="Awaiting Review"
           value={stats.awaitingReview || 0}
-          subtitle="Submitted for officer verification"
           icon={<Clock size={20} />}
           accentColor="#fbbf24"
           onClick={() => navigate('/my-tasks?filter=SUBMITTED_FOR_REVIEW')}
@@ -363,7 +354,6 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           title="Overdue Tasks"
           value={stats.overdue || 0}
-          subtitle="Action immediately"
           icon={<AlertTriangle size={20} />}
           accentColor="#ef4444"
           onClick={() => navigate('/my-tasks?filter=OVERDUE')}
@@ -371,7 +361,6 @@ export const DashboardPage: React.FC = () => {
         <StatCard
           title="Completed Tasks"
           value={stats.completed || 0}
-          subtitle="Satisfied and closed"
           icon={<CheckCircle2 size={20} />}
           accentColor="#10b981"
           onClick={() => navigate('/my-tasks?filter=COMPLETED')}

@@ -1,266 +1,510 @@
 import React, { useState, useEffect } from 'react';
 import { TrainingRecord, Department } from '../../types/database';
 import { DataService, subscribeToDataChanges } from '../../services/dataService';
-import { CreateTrainingModal } from '../../components/training/CreateTrainingModal';
 import { PhotoGallery } from '../../components/common/PhotoGallery';
 import { Modal } from '../../components/common/Modal';
-import { GraduationCap, PlusCircle, Search, Users, Calendar, Building2, Eye } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { useToast } from '../../context/ToastContext';
+import { useNavigate } from 'react-router-dom';
+import { exportTrainingReportPDF } from '../../utils/trainingReportExport';
+import { formatISTDate } from '../../utils/dateUtils';
+import {
+  GraduationCap,
+  PlusCircle,
+  Search,
+  Users,
+  Building2,
+  MapPin,
+  Eye,
+  FileDown,
+  Loader2,
+  FileSpreadsheet,
+  Image,
+  Calendar,
+  UserCheck
+} from 'lucide-react';
 
 export const TrainingRecordsPage: React.FC = () => {
-  const { isOfficer } = useAuth();
+  const { currentUser, isOfficer } = useAuth();
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+
+  const isAdminOrOfficer = Boolean(
+    isOfficer ||
+    currentUser?.role === 'HEALTH_SAFETY_OFFICER' ||
+    currentUser?.role === 'ADMIN' ||
+    currentUser?.user_access === 'ADMIN' ||
+    (currentUser?.position && currentUser.position.trim().toUpperCase() === 'HEALTH AND SAFETY')
+  );
+
   const [trainings, setTrainings] = useState<TrainingRecord[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [deptFilter, setDeptFilter] = useState('ALL');
-
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [selectedTraining, setSelectedTraining] = useState<TrainingRecord | null>(null);
+  const [exportingId, setExportingId] = useState<string | null>(null);
 
   const loadData = async () => {
-    const [trainList, deptList] = await Promise.all([
-      DataService.getTrainingRecords(),
-      DataService.getDepartments(),
-    ]);
-    setTrainings(trainList);
-    setDepartments(deptList);
+    try {
+      const [trainList, deptList] = await Promise.all([
+        DataService.getTrainingRecords(),
+        DataService.getDepartments(),
+      ]);
+      setTrainings(trainList);
+      setDepartments(deptList);
+    } catch (err) {
+      console.error('Error loading training records:', err);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
+    if (!isAdminOrOfficer) {
+      showToast({
+        type: 'error',
+        title: 'Access Denied',
+        message: 'This page is restricted to Health & Safety Officers and Admins.',
+      });
+      navigate('/', { replace: true });
+      return;
+    }
+
     loadData();
     return subscribeToDataChanges(loadData);
-  }, []);
+  }, [isAdminOrOfficer]);
+
+  const handleDownloadPDF = async (t: TrainingRecord, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setExportingId(t.id);
+
+    try {
+      await exportTrainingReportPDF(t);
+      showToast({
+        type: 'success',
+        title: 'Report Downloaded',
+        message: `${t.training_number} PDF exported.`,
+      });
+    } catch (err: any) {
+      console.error('PDF export error:', err);
+      showToast({
+        type: 'error',
+        title: 'Export Failed',
+        message: err.message || 'Could not compile PDF report.',
+      });
+    } finally {
+      setExportingId(null);
+    }
+  };
+
+  if (!isAdminOrOfficer) {
+    return null;
+  }
 
   const filtered = trainings.filter((t) => {
+    const query = searchQuery.toLowerCase().trim();
     const matchesSearch =
-      searchQuery === '' ||
-      t.training_topic.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.training_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      t.department?.name.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesDept = deptFilter === 'ALL' || t.department_id === deptFilter;
+      query === '' ||
+      (t.training_topic || '').toLowerCase().includes(query) ||
+      (t.training_number || '').toLowerCase().includes(query) ||
+      (t.department?.name || '').toLowerCase().includes(query) ||
+      (t.area || '').toLowerCase().includes(query) ||
+      (t.conducted_by || '').toLowerCase().includes(query);
+
+    const matchesDept = deptFilter === 'ALL' || t.department_id === deptFilter || String(t.dept_id) === deptFilter;
     return matchesSearch && matchesDept;
   });
 
-  const totalTrainees = trainings.reduce((acc, t) => acc + (t.number_of_persons || 0), 0);
-
   return (
-    <div className="page-wrapper">
-      {/* Header */}
+    <div className="page-wrapper" style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '30px' }}>
+      
+      {/* Compact Top Header */}
       <div
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '24px',
+          gap: '12px',
+          marginBottom: '16px',
         }}
       >
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <GraduationCap size={24} color="#38bdf8" />
-            <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Safety Training Records</h2>
-          </div>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-            Compliance records for occupational safety training, machinery operating drills, and PPE compliance.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <GraduationCap size={24} color="var(--brand-primary)" />
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 800, color: 'var(--text-primary)', margin: 0 }}>
+            Safety Trainings
+          </h2>
         </div>
 
-        {isOfficer && (
-          <button className="btn btn-primary" onClick={() => setShowCreateModal(true)}>
-            <PlusCircle size={18} />
-            Record Training Session
-          </button>
-        )}
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={() => navigate('/training/add')}
+          style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+        >
+          <PlusCircle size={15} />
+          <span>Add Training</span>
+        </button>
       </div>
 
-      {/* Trainees Banner */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-          gap: '16px',
-          marginBottom: '20px',
-        }}
-      >
-        <div className="ehs-card" style={{ padding: '16px', borderLeft: '4px solid #38bdf8' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>TOTAL SESSIONS</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#f8fafc', marginTop: '4px' }}>
-            {trainings.length}
-          </div>
-        </div>
-
-        <div className="ehs-card" style={{ padding: '16px', borderLeft: '4px solid #10b981' }}>
-          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>WORKERS TRAINED</div>
-          <div style={{ fontSize: '1.8rem', fontWeight: 800, color: '#10b981', marginTop: '4px' }}>
-            {totalTrainees}
-          </div>
-        </div>
-      </div>
-
-      {/* Filter Bar */}
+      {/* Compact Filter Bar */}
       <div
         className="ehs-card"
         style={{
-          padding: '16px',
-          marginBottom: '20px',
+          padding: '10px 14px',
+          marginBottom: '16px',
           display: 'flex',
           flexWrap: 'wrap',
-          gap: '12px',
+          gap: '10px',
           alignItems: 'center',
         }}
       >
-        <div style={{ position: 'relative', flex: '1 1 260px' }}>
+        <div style={{ position: 'relative', flex: '1 1 200px' }}>
           <Search
-            size={16}
+            size={15}
             color="var(--text-muted)"
-            style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)' }}
+            style={{ position: 'absolute', left: '10px', top: '50%', transform: 'translateY(-50%)' }}
           />
           <input
             type="text"
             className="form-input"
-            placeholder="Search topic, training code, department..."
+            placeholder="Search trainings..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            style={{ paddingLeft: '36px' }}
+            style={{ paddingLeft: '32px', height: '36px', fontSize: '0.85rem' }}
           />
         </div>
 
-        <div style={{ flex: '1 1 180px' }}>
+        <div style={{ flex: '0 1 180px' }}>
           <select
             className="form-select"
             value={deptFilter}
             onChange={(e) => setDeptFilter(e.target.value)}
+            style={{ height: '36px', fontSize: '0.85rem' }}
           >
             <option value="ALL">All Departments</option>
             {departments.map((d) => (
               <option key={d.id} value={d.id}>
-                {d.name}
+                {d.name} {d.code ? `(${d.code})` : ''}
               </option>
             ))}
           </select>
         </div>
+
+        <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600, marginLeft: 'auto' }}>
+          {filtered.length} session{filtered.length === 1 ? '' : 's'}
+        </div>
       </div>
 
-      {/* Training Table */}
-      <div className="table-container">
-        <table className="ehs-table">
-          <thead>
-            <tr>
-              <th>Training ID</th>
-              <th>Department</th>
-              <th>Topic / Subject</th>
-              <th>Attendance</th>
-              <th>Training Date</th>
-              <th>Officer In-Charge</th>
-              <th>Photos</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                  No training records found.
-                </td>
-              </tr>
-            ) : (
-              filtered.map((t) => (
-                <tr key={t.id} onClick={() => setSelectedTraining(t)} style={{ cursor: 'pointer' }}>
-                  <td style={{ fontWeight: 800, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)' }}>
-                    {t.training_number}
-                  </td>
-                  <td>{t.department?.name || 'All'}</td>
-                  <td style={{ maxWidth: '280px' }}>
-                    <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{t.training_topic}</div>
-                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      {t.description}
+      {/* Loading state */}
+      {loading ? (
+        <div className="ehs-card" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
+          <Loader2 size={20} className="spinner" style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px auto' }} />
+          <span style={{ fontSize: '0.85rem' }}>Loading trainings...</span>
+        </div>
+      ) : filtered.length === 0 ? (
+        /* Empty State */
+        <div className="ehs-card" style={{ padding: '40px 20px', textAlign: 'center' }}>
+          <GraduationCap size={36} color="var(--border-hover)" style={{ margin: '0 auto 8px auto' }} />
+          <p style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.95rem' }}>
+            No training records found.
+          </p>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => navigate('/training/add')}
+            style={{ marginTop: '12px' }}
+          >
+            <PlusCircle size={15} /> Add Training Now
+          </button>
+        </div>
+      ) : (
+        <>
+          {/* ============================================================== */}
+          {/* 1. MOBILE PURE VIEW CARDS (Rendered on mobile screens)         */}
+          {/* ============================================================== */}
+          <div className="training-mobile-cards">
+            {filtered.map((t) => {
+              const groupPhotos = t.group_photos || [];
+              const attendancePhotos = t.attendance_photos || [];
+
+              return (
+                <div
+                  key={t.id}
+                  className="training-card-item"
+                  onClick={() => setSelectedTraining(t)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {/* Top line: Code + Status + Date */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <span style={{ fontWeight: 800, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+                        {t.training_number}
+                      </span>
+                      <span style={{ fontSize: '0.65rem', fontWeight: 700, padding: '1px 5px', borderRadius: '3px', background: 'rgba(22, 163, 74, 0.1)', color: '#15803d', textTransform: 'uppercase' }}>
+                        Completed
+                      </span>
                     </div>
-                  </td>
-                  <td>
-                    <span className="badge" style={{ background: 'rgba(22, 163, 74, 0.12)', color: '#15803d', border: '1px solid rgba(22, 163, 74, 0.25)' }}>
-                      <Users size={12} />
-                      {t.number_of_persons} persons
+
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Calendar size={12} />
+                      {formatISTDate(t.training_date)}
                     </span>
-                  </td>
-                  <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    {new Date(t.training_date).toLocaleDateString()}
-                  </td>
-                  <td style={{ fontSize: '0.85rem' }}>{t.creator?.full_name || 'Safety Officer'}</td>
-                  <td>
-                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                      {t.photos?.length || 0} photos
+                  </div>
+
+                  {/* Topic */}
+                  <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.92rem', lineHeight: 1.35 }}>
+                    {t.training_topic}
+                  </div>
+
+                  {/* Dept & Area */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '0.78rem', color: 'var(--text-secondary)', flexWrap: 'wrap' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <Building2 size={13} color="var(--brand-secondary)" />
+                      {t.department?.name || 'Department'}
                     </span>
-                  </td>
-                  <td>
-                    <button
-                      className="btn-ghost"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedTraining(t);
-                      }}
-                      style={{ color: 'var(--brand-primary)', padding: '6px' }}
-                    >
-                      <Eye size={16} />
-                    </button>
-                  </td>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <MapPin size={13} color="var(--brand-primary)" />
+                      {t.area || 'Plant Area'}
+                    </span>
+                  </div>
+
+                  {/* Attendees & Trainer info */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '8px', marginTop: '2px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d', background: 'rgba(22, 163, 74, 0.1)', padding: '2px 6px', borderRadius: '4px' }}>
+                        {t.number_of_persons} Attendees
+                      </span>
+                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        {t.conducted_by || 'Safety Officer'}
+                      </span>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }} onClick={(e) => e.stopPropagation()}>
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={() => setSelectedTraining(t)}
+                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                      >
+                        <Eye size={14} /> View
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={(e) => handleDownloadPDF(t, e)}
+                        disabled={exportingId === t.id}
+                        style={{ padding: '4px 8px', fontSize: '0.75rem' }}
+                      >
+                        {exportingId === t.id ? (
+                          <Loader2 size={14} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+                        ) : (
+                          <FileDown size={14} />
+                        )}
+                        PDF
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* ============================================================== */}
+          {/* 2. DESKTOP TABULAR VIEW (Rendered on larger screens)           */}
+          {/* ============================================================== */}
+          <div className="training-desktop-table table-container" style={{ background: '#ffffff', borderRadius: '8px', boxShadow: 'var(--shadow-sm)' }}>
+            <table className="ehs-table">
+              <thead>
+                <tr>
+                  <th style={{ width: '120px' }}>Code</th>
+                  <th style={{ width: '150px' }}>Department & Area</th>
+                  <th>Topic</th>
+                  <th style={{ width: '110px' }}>Headcount</th>
+                  <th style={{ width: '110px' }}>Date</th>
+                  <th style={{ width: '140px' }}>Conducted By</th>
+                  <th style={{ width: '130px' }}>Photos</th>
+                  <th style={{ width: '110px', textAlign: 'center' }}>Actions</th>
                 </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
+              </thead>
+              <tbody>
+                {filtered.map((t) => {
+                  const groupPhotos = t.group_photos || [];
+                  const attendancePhotos = t.attendance_photos || [];
+
+                  return (
+                    <tr
+                      key={t.id}
+                      onClick={() => setSelectedTraining(t)}
+                      style={{ cursor: 'pointer' }}
+                    >
+                      <td>
+                        <span style={{ fontWeight: 800, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
+                          {t.training_number}
+                        </span>
+                      </td>
+
+                      <td>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.82rem' }}>
+                          {t.department?.name || 'Department'}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                          {t.area}
+                        </div>
+                      </td>
+
+                      <td style={{ maxWidth: '280px' }}>
+                        <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.85rem' }}>
+                          {t.training_topic}
+                        </div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {t.description}
+                        </div>
+                      </td>
+
+                      <td>
+                        <span className="badge" style={{ background: 'rgba(22, 163, 74, 0.1)', color: '#15803d', fontWeight: 700, fontSize: '0.75rem' }}>
+                          <Users size={12} /> {t.number_of_persons}
+                        </span>
+                      </td>
+
+                      <td style={{ fontSize: '0.8rem', color: 'var(--text-primary)' }}>
+                        {formatISTDate(t.training_date)}
+                      </td>
+
+                      <td style={{ fontSize: '0.82rem', fontWeight: 600 }}>
+                        {t.conducted_by || 'Safety Officer'}
+                      </td>
+
+                      <td>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.7rem' }}>
+                          {attendancePhotos.length > 0 && (
+                            <span style={{ color: 'var(--brand-secondary)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <FileSpreadsheet size={11} /> {attendancePhotos.length} Roster
+                            </span>
+                          )}
+                          {groupPhotos.length > 0 && (
+                            <span style={{ color: '#15803d', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                              <Image size={11} /> {groupPhotos.length} Photos
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="btn-ghost"
+                            onClick={() => setSelectedTraining(t)}
+                            style={{ color: 'var(--brand-secondary)', padding: '5px' }}
+                            title="View Details"
+                          >
+                            <Eye size={16} />
+                          </button>
+
+                          <button
+                            className="btn-ghost"
+                            onClick={(e) => handleDownloadPDF(t, e)}
+                            disabled={exportingId === t.id}
+                            style={{ color: 'var(--brand-primary)', padding: '5px' }}
+                            title="Download PDF"
+                          >
+                            {exportingId === t.id ? (
+                              <Loader2 size={16} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <FileDown size={16} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       {/* Details Modal */}
       {selectedTraining && (
         <Modal
           isOpen={Boolean(selectedTraining)}
           onClose={() => setSelectedTraining(null)}
-          title={`${selectedTraining.training_number} — Safety Training Session`}
-          subtitle={`Conducted on ${new Date(selectedTraining.training_date).toLocaleDateString()}`}
+          title={selectedTraining.training_number}
+          subtitle={`${formatISTDate(selectedTraining.training_date)} • ${selectedTraining.department?.name || 'Department'}`}
           size="lg"
         >
-          <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
+          {/* Key Badges */}
+          <div style={{ display: 'flex', gap: '6px', marginBottom: '14px', flexWrap: 'wrap' }}>
             <span className="badge" style={{ background: 'rgba(2, 132, 199, 0.12)', color: 'var(--brand-secondary)' }}>
-              <Building2 size={13} /> {selectedTraining.department?.name}
+              <Building2 size={12} /> {selectedTraining.department?.name}
+            </span>
+            <span className="badge" style={{ background: 'rgba(185, 28, 28, 0.1)', color: 'var(--brand-primary)' }}>
+              <MapPin size={12} /> {selectedTraining.area}
             </span>
             <span className="badge" style={{ background: 'rgba(22, 163, 74, 0.12)', color: '#15803d' }}>
-              <Users size={13} /> {selectedTraining.number_of_persons} Attendees Certified
+              <Users size={12} /> {selectedTraining.number_of_persons} Attendees
             </span>
-            <span className="badge" style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-subtle)' }}>
-              Instructor: {selectedTraining.creator?.full_name || 'Safety Officer'}
+            <span className="badge" style={{ background: 'var(--bg-surface-elevated)' }}>
+              <UserCheck size={12} /> {selectedTraining.conducted_by || 'Safety Officer'}
             </span>
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>CURRICULUM TOPIC</div>
-            <h4 style={{ fontSize: '1.05rem', color: 'var(--text-primary)', marginTop: '4px' }}>
+          {/* Topic */}
+          <div style={{ marginBottom: '12px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>TOPIC</div>
+            <h4 style={{ fontSize: '1rem', fontWeight: 800, color: 'var(--text-primary)', marginTop: '2px' }}>
               {selectedTraining.training_topic}
             </h4>
           </div>
 
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700 }}>SESSION DESCRIPTION</div>
-            <p style={{ fontSize: '0.875rem', color: 'var(--text-secondary)', marginTop: '4px', lineHeight: 1.5 }}>
+          {/* Description */}
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700 }}>DESCRIPTION</div>
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', lineHeight: 1.5, background: '#f8fafc', padding: '10px', borderRadius: '6px', border: '1px solid var(--border-subtle)', marginTop: '4px', whiteSpace: 'pre-wrap' }}>
               {selectedTraining.description}
             </p>
           </div>
 
-          <div>
-            <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '8px' }}>
-              ATTENDANCE EVIDENCE & WORKSHOP PHOTOS
+          {/* Attendance Photo */}
+          <div style={{ marginBottom: '14px' }}>
+            <div style={{ fontSize: '0.72rem', color: 'var(--brand-secondary)', fontWeight: 700, marginBottom: '6px' }}>
+              ATTENDANCE SHEET
             </div>
-            <PhotoGallery photos={selectedTraining.photos} />
+            <PhotoGallery photos={selectedTraining.attendance_photos} emptyMessage="No attendance sheet attached" />
+          </div>
+
+          {/* Group Photos */}
+          <div style={{ marginBottom: '18px' }}>
+            <div style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 700, marginBottom: '6px' }}>
+              TRAINING PHOTOS
+            </div>
+            <PhotoGallery photos={selectedTraining.group_photos} emptyMessage="No training photos attached" />
+          </div>
+
+          {/* Actions */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--border-subtle)', paddingTop: '12px' }}>
+            <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedTraining(null)}>
+              Close
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => handleDownloadPDF(selectedTraining)}
+              disabled={exportingId === selectedTraining.id}
+            >
+              {exportingId === selectedTraining.id ? (
+                <Loader2 size={15} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+              ) : (
+                <FileDown size={15} />
+              )}
+              Download PDF Report
+            </button>
           </div>
         </Modal>
       )}
 
-      {/* Create Modal */}
-      <CreateTrainingModal
-        isOpen={showCreateModal}
-        onClose={() => setShowCreateModal(false)}
-        onCreated={loadData}
-      />
     </div>
   );
 };

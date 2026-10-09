@@ -180,11 +180,8 @@ export const AllTasksPage: React.FC = () => {
 
   return (
     <div className="page-wrapper">
-      <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>All Safety Tasks & Work Orders</h2>
-        <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-          Realtime status oversight, infinite rework tracking, and employee submission verification.
-        </p>
+      <div style={{ marginBottom: '16px' }}>
+        <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>All Safety Tasks & Work Orders</h2>
       </div>
 
       {/* Stage Filter Tabs with Row Counts */}
@@ -215,7 +212,7 @@ export const AllTasksPage: React.FC = () => {
       <div
         className="ehs-card"
         style={{
-          padding: '16px',
+          padding: '14px',
           marginBottom: '20px',
           display: 'flex',
           flexWrap: 'wrap',
@@ -232,7 +229,7 @@ export const AllTasksPage: React.FC = () => {
           <input
             type="text"
             className="form-input"
-            placeholder="Search Task ID, employee, description, location..."
+            placeholder="Search tasks..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             style={{ paddingLeft: '36px' }}
@@ -257,8 +254,8 @@ export const AllTasksPage: React.FC = () => {
       </div>
 
 
-      {/* Task Table */}
-      <div className="table-container">
+      {/* Task Desktop Table */}
+      <div className="table-container table-desktop-view">
         <table className="ehs-table">
           <thead>
             <tr>
@@ -348,6 +345,96 @@ export const AllTasksPage: React.FC = () => {
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Task Mobile Cards View */}
+      <div className="cards-mobile-view">
+        {filteredTasks.length === 0 ? (
+          <div className="ehs-card" style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+            No tasks match current filters.
+          </div>
+        ) : (
+          filteredTasks.map((task) => {
+            const obs = task.observation;
+            const isOverdue =
+              task.status === 'OVERDUE' ||
+              (new Date(task.due_date).getTime() < Date.now() && task.status !== 'COMPLETED');
+
+            return (
+              <div
+                key={task.id}
+                className="mobile-data-card"
+                onClick={() => setSelectedTask(task)}
+                style={{
+                  borderLeft: isOverdue ? '4px solid #ef4444' : undefined,
+                  background: isOverdue ? 'rgba(239, 68, 68, 0.03)' : '#ffffff',
+                }}
+              >
+                <div className="mobile-card-row">
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {isOverdue && <AlertTriangle size={15} color="#ef4444" />}
+                    <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.9rem' }}>
+                      {task.task_number}
+                    </span>
+                    {obs && <PriorityBadge priority={obs.priority} showRisk={false} />}
+                  </div>
+                  <StatusBadge status={task.status} />
+                </div>
+
+                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                  {obs?.observation_text || 'Safety Task'}
+                </div>
+
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Department / Area</span>
+                  <span className="mobile-card-val">
+                    {obs?.department?.name || 'Plant'} • {obs?.area || 'Site'}
+                  </span>
+                </div>
+
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Assignee</span>
+                  <span className="mobile-card-val" style={{ color: '#0284c7' }}>
+                    {task.assignee?.full_name || 'Unassigned'}
+                  </span>
+                </div>
+
+                <div className="mobile-card-row">
+                  <span className="mobile-card-label">Due Date</span>
+                  <span
+                    className="mobile-card-val"
+                    style={{ color: isOverdue ? '#ef4444' : 'var(--text-muted)', fontWeight: isOverdue ? 700 : 500 }}
+                  >
+                    {formatISTDate(task.due_date)} {isOverdue ? '(Overdue)' : ''}
+                  </span>
+                </div>
+
+                <div style={{ marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    className="btn-outline btn-sm"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedTask(task);
+                    }}
+                    style={{
+                      width: '100%',
+                      justifyContent: 'center',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '6px',
+                      padding: '8px 12px',
+                      fontWeight: 700,
+                    }}
+                  >
+                    <Eye size={15} />
+                    <span>View Task Details</span>
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Modals */}

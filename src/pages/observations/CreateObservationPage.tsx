@@ -22,51 +22,43 @@ import {
 } from 'lucide-react';
 import { formatISTDateTime } from '../../utils/dateUtils';
 
-const StepHeader: React.FC<{ step: number; title: string; subtitle?: string; icon: React.ReactNode }> = ({
+const StepHeader: React.FC<{ step: number; title: string; icon: React.ReactNode }> = ({
   step,
   title,
-  subtitle,
   icon,
 }) => (
   <div
     style={{
       display: 'flex',
       alignItems: 'center',
-      gap: '12px',
-      marginBottom: '16px',
-      paddingBottom: '12px',
+      gap: '10px',
+      marginBottom: '14px',
+      paddingBottom: '10px',
       borderBottom: '1px solid var(--border-subtle)',
     }}
   >
     <div
       style={{
-        width: '32px',
-        height: '32px',
-        borderRadius: '8px',
+        width: '28px',
+        height: '28px',
+        borderRadius: '6px',
         background: 'rgba(2, 132, 199, 0.1)',
         color: 'var(--brand-primary)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
         fontWeight: 800,
-        fontSize: '0.9rem',
+        fontSize: '0.82rem',
         flexShrink: 0,
       }}
     >
       {step}
     </div>
-    <div style={{ flex: 1 }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        <span style={{ color: 'var(--brand-primary)' }}>{icon}</span>
-        <h4 style={{ fontSize: '1rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
-          {title}
-        </h4>
-      </div>
-      {subtitle && (
-        <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)', margin: '2px 0 0 0' }}>
-          {subtitle}
-        </p>
-      )}
+    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <span style={{ color: 'var(--brand-primary)' }}>{icon}</span>
+      <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+        {title}
+      </h4>
     </div>
   </div>
 );
@@ -212,15 +204,14 @@ export const CreateObservationPage: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
 
           {/* STEP 1: LOCATION */}
-          <div className="ehs-card" style={{ padding: '22px' }}>
+          <div className="ehs-card" style={{ padding: '20px' }}>
             <StepHeader
               step={1}
-              title="Department &  Location"
-              subtitle="Select the plant department and area where the hazard exists"
+              title="Department & Location"
               icon={<Building2 size={18} />}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
               {/* Department Dropdown */}
               <div className="form-group">
                 <label className="form-label">
@@ -238,31 +229,28 @@ export const CreateObservationPage: React.FC = () => {
                     </option>
                   ))}
                 </select>
-
               </div>
 
               {/* Specific Area */}
               <div className="form-group">
                 <label className="form-label">
-                  Specific Area / Machinery / Tag <span className="required">*</span>
+                  Specific Area / Machinery <span className="required">*</span>
                 </label>
                 <input
                   type="text"
                   className="form-input"
-                  placeholder="e.g. Rolling Mill Bay 3, Furnace Discharge Conveyor #2"
+                  placeholder="e.g. Rolling Mill Bay 3"
                   value={area}
                   onChange={(e) => setArea(e.target.value)}
                   required
                 />
-
               </div>
             </div>
           </div>
 
           {/* STEP 2: RISK ASSESSMENT */}
-          <div className="ehs-card" style={{ padding: '22px' }}>
-
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px', alignItems: 'center' }}>
+          <div className="ehs-card" style={{ padding: '20px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', alignItems: 'center' }}>
               <div className="form-group">
                 <label className="form-label">
                   Priority <span className="required">*</span>
@@ -274,11 +262,10 @@ export const CreateObservationPage: React.FC = () => {
                   required
                   style={{ fontWeight: 600 }}
                 >
-                  <option value="LOW">LOW — Minor hazard or housekeeping</option>
-                  <option value="MEDIUM">MEDIUM — Moderate risk requiring timely repair</option>
-                  <option value="HIGH">HIGH — Critical hazard or imminent danger</option>
+                  <option value="LOW">LOW (1% – 3%)</option>
+                  <option value="MEDIUM">MEDIUM (3% – 6%)</option>
+                  <option value="HIGH">HIGH (6% – 9%)</option>
                 </select>
-
               </div>
 
               <div>
@@ -375,13 +362,9 @@ export const CreateObservationPage: React.FC = () => {
                     ))
                   )}
                 </select>
-                {filteredEmployees.length === 0 ? (
+                {filteredEmployees.length === 0 && (
                   <span className="form-hint" style={{ color: '#dc2626', fontSize: '0.76rem', fontWeight: 600 }}>
                     ⚠️ No active employees are currently assigned to this department.
-                  </span>
-                ) : (
-                  <span className="form-hint" style={{ fontSize: '0.76rem' }}>
-                    Showing {filteredEmployees.length} employee(s) filtered by selected department.
                   </span>
                 )}
               </div>
@@ -406,7 +389,7 @@ export const CreateObservationPage: React.FC = () => {
           <div className="ehs-card" style={{ padding: '16px' }}>
             <StepHeader
               step={5}
-              title="Initial Photographic Proof (Hazard Condition)"
+              title="Hazard Condition Photos"
               icon={<Camera size={16} />}
             />
 
