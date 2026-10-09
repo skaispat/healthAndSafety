@@ -16,7 +16,8 @@ import {
   CheckCircle2,
   RotateCcw,
   Clock,
-  Download
+  Download,
+  ShieldCheck
 } from 'lucide-react';
 import { formatISTDate, formatISTDateTime } from '../../utils/dateUtils';
 import { exportTaskReportPDF } from '../../utils/reportExport';
@@ -41,7 +42,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Form states for employee / officer update
   const [solutionRemarks, setSolutionRemarks] = useState('');
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
-  const [resolutionStage, setResolutionStage] = useState<'PARTIALLY_DONE' | 'COMPLETED'>('COMPLETED');
+  const [resolutionStage, setResolutionStage] = useState<'PARTIALLY_DONE' | 'SUBMITTED_FOR_REVIEW'>('SUBMITTED_FOR_REVIEW');
 
   // States for admin / officer review
   const [officerNotes, setOfficerNotes] = useState('');
@@ -51,6 +52,14 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   // Fallback observation loading if task.observation is missing
   const [loadedObs, setLoadedObs] = useState<Observation | null>(task?.observation || null);
+
+  const isSafetyOfficerOrAdmin = Boolean(
+    isOfficer ||
+    (currentUser?.position && currentUser.position.trim().toUpperCase() === 'HEALTH AND SAFETY') ||
+    (currentUser?.role && currentUser.role.toUpperCase() === 'HEALTH_SAFETY_OFFICER') ||
+    (currentUser?.role && currentUser.role.toLowerCase() === 'admin')
+  );
+  const isAdmin = isSafetyOfficerOrAdmin;
 
   useEffect(() => {
     if (!task) return;
@@ -66,25 +75,45 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   }, [task]);
 
+  useEffect(() => {
+    if (isOpen) {
+      setResolutionStage('SUBMITTED_FOR_REVIEW');
+      setShowReworkBox(false);
+      setOfficerNotes('');
+      setSolutionRemarks('');
+      setPhotos([]);
+    }
+  }, [isOpen]);
+
   if (!task) return null;
 
   const obs = task.observation || loadedObs || (task as any);
-  const currentEmpId = Number(currentUser?.emp_id || currentUser?.id);
-  const isAssignee = currentEmpId === Number(task.assigned_to);
-  const isParticipant = task.participants?.some((p) => Number(p.user_id) === currentEmpId);
-  const canSubmitAction = (isAssignee || isParticipant) && task.status !== 'COMPLETED';
+  const rawAssigneeId = task.assigned_to ?? obs?.assigned_to ?? task.assignee?.emp_id ?? (task.assignee as any)?.id;
+  const assigneeEmpId = rawAssigneeId != null && rawAssigneeId !== '' && !isNaN(Number(rawAssigneeId)) ? Number(rawAssigneeId) : null;
+  const rawCreatorId = task.assigned_by ?? obs?.created_by ?? task.assigner?.emp_id ?? (task.assigner as any)?.id;
+  const creatorEmpId = rawCreatorId != null && rawCreatorId !== '' && !isNaN(Number(rawCreatorId)) ? Number(rawCreatorId) : null;
+  const currentEmpId = currentUser?.emp_id != null && !isNaN(Number(currentUser.emp_id))
+    ? Number(currentUser.emp_id)
+    : (currentUser?.id != null && !isNaN(Number(currentUser.id)) ? Number(currentUser.id) : null);
+
+  const isAssignee = Boolean(currentEmpId && assigneeEmpId && currentEmpId === assigneeEmpId);
+  const isParticipant = Boolean(currentEmpId && task.participants?.some((p) => Number(p.user_id) === currentEmpId));
+  const isAssigneeOrParticipant = isAssignee || isParticipant;
+  const isCompleted = task.status === 'COMPLETED' || obs?.status === 'COMPLETED' || task.status === 'CLOSED';
+  const isPendingVerification = task.status === 'SUBMITTED_FOR_REVIEW' || obs?.status === 'SUBMITTED_FOR_REVIEW';
+
+  // CRITICAL RULE:
+  // Safety Officer or Admin (isAdmin) must NEVER see the corrective action submission/save form.
+  // When an observation is added or assigned by officer/admin:
+  // - Before user response (!isPendingVerification): Officer/Admin only sees "Awaiting Assignee Action & Response" (NO complete or save button).
+  // - After user response (isPendingVerification): Officer/Admin sees "Safety Officer / Admin Verification" with Review, Approve (Complete), and Rework buttons.
+  // ONLY the non-admin assigned employee/participant can submit corrective action evidence.
+  const canSubmitAction = !isAdmin && isAssigneeOrParticipant && !isCompleted;
   const isRework = task.status === 'REWORK_REQUIRED';
   const reworkReason = task.rework_reason || obs?.rework_reason;
 
-  const isAdmin = Boolean(
-    isOfficer ||
-    (currentUser?.position && currentUser.position.trim().toUpperCase() === 'HEALTH AND SAFETY') ||
-    Number(task.assigned_by) === currentEmpId ||
-    Number(obs?.created_by) === currentEmpId
-  );
-
   const isSelfAssigned = isAssignee && (isAdmin || Number(task.assigned_by) === currentEmpId);
-  const canAct = (canSubmitAction || isAdmin) && task.status !== 'COMPLETED' && task.status !== 'CLOSED';
+  const canAct = canSubmitAction;
 
   const correctiveActions = (task.corrective_actions && task.corrective_actions.length > 0)
     ? task.corrective_actions
@@ -100,8 +129,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const priority = obs?.priority || loadedObs?.priority || (task as any).priority;
   const problemText = obs?.observation_text || loadedObs?.observation_text || (task as any).observation_text || '';
   const solutionText = obs?.solution_text || loadedObs?.solution_text || (task as any).solution_text || '';
-  const assignerEmpId = Number(task.assigned_by || obs?.created_by || loadedObs?.created_by);
-  const assigneeEmpId = Number(task.assigned_to || obs?.assigned_to || loadedObs?.assigned_to);
+  const assignerEmpId = creatorEmpId || Number(task.assigned_by || obs?.created_by || loadedObs?.created_by);
 
   // Pool of all photos from task and obs
   // Pool of all photos from task and obs
@@ -178,7 +206,6 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   const afterPhotos = Array.from(afterPhotosMap.values());
   const observationPhotos = beforePhotos;
-  const isCompleted = task.status === 'COMPLETED' || obs?.status === 'COMPLETED';
 
   const handleExportPDF = async () => {
     setIsExporting(true);
@@ -220,7 +247,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
     }
   };
 
-  // Unified task submission handler (Partially Done vs Complete & Close Task)
+  // Unified task submission handler (Partially Done vs Submit for Verification / Complete & Close)
   const handleUnifiedSubmit = async () => {
     if (!solutionRemarks.trim()) {
       showToast({
@@ -234,42 +261,22 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     setIsSubmitting(true);
     try {
-      const isCompleteAction = resolutionStage === 'COMPLETED';
+      const isVerificationAction = resolutionStage === 'SUBMITTED_FOR_REVIEW';
 
       await DataService.submitCorrectiveAction({
         task_id: task.observation_id || task.id,
         submitted_by: Number(currentUser.emp_id || currentUser.id),
         action_description: solutionRemarks.trim(),
         photos: photos.map((p) => ({ url: p.url, file_name: p.file_name })),
-        stage: isCompleteAction ? 'COMPLETED' : 'PARTIALLY_DONE',
-        markAsCompleted: isCompleteAction,
+        stage: isVerificationAction ? 'SUBMITTED_FOR_REVIEW' : 'PARTIALLY_DONE',
+        markAsCompleted: false,
       });
 
-      if (isCompleteAction) {
-        try {
-          await DataService.reviewTask({
-            task_id: task.observation_id || task.id,
-            officer_id: currentUser.emp_id || currentUser.id,
-            decision: 'COMPLETE',
-          });
-        } catch (e) {
-          // already completed by submitCorrectiveAction
-        }
-
-        try {
-          confetti({
-            particleCount: 80,
-            spread: 70,
-            origin: { y: 0.6 },
-          });
-        } catch (e) {
-          // ignore if not supported
-        }
-
+      if (isVerificationAction) {
         showToast({
           type: 'success',
-          title: 'Task Completed & Closed',
-          message: `${task.task_number} has been marked as COMPLETED.`,
+          title: 'Submitted for Verification',
+          message: `${task.task_number} has been submitted for Safety Officer / Admin verification.`,
         });
       } else {
         showToast({
@@ -288,6 +295,45 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         type: 'error',
         title: 'Update Failed',
         message: err.message || 'Unable to update task.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Admin / Officer review: Verify & Approve (Complete Task)
+  const handleAdminApprove = async () => {
+    if (!currentUser) return;
+    setIsSubmitting(true);
+    try {
+      await DataService.reviewTask({
+        task_id: task.observation_id || task.id,
+        officer_id: currentUser.emp_id || currentUser.id,
+        decision: 'COMPLETE',
+      });
+
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+        });
+      } catch (e) {
+        // ignore if not supported
+      }
+
+      showToast({
+        type: 'success',
+        title: 'Task Verified & Completed',
+        message: `${task.task_number} has been verified and marked as COMPLETED.`,
+      });
+      onTaskUpdated();
+      onClose();
+    } catch (err: any) {
+      showToast({
+        type: 'error',
+        title: 'Verification Failed',
+        message: err.message || 'Unable to approve task.',
       });
     } finally {
       setIsSubmitting(false);
@@ -869,8 +915,159 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
             )}
 
-            {/* UNIFIED SUBMISSION SECTION: 1 clean form, choice of Partially Done / Complete, 1 action button */}
-            {canAct && (
+            {/* 1. EMPLOYEE VIEW: TASK IS PENDING VERIFICATION */}
+            {isPendingVerification && !isAdmin && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: '12px',
+                  padding: '16px',
+                  background: '#fffbeb',
+                  borderRadius: '10px',
+                  border: '1px solid #fde68a',
+                  marginTop: '10px',
+                }}
+              >
+                <Clock size={22} color="#d97706" style={{ marginTop: '2px', flexShrink: 0 }} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontWeight: 800, fontSize: '0.92rem', color: '#92400e', marginBottom: '4px' }}>
+                    Pending Safety Officer / Admin Verification
+                  </div>
+                  <p style={{ fontSize: '0.84rem', color: '#b45309', margin: 0, lineHeight: 1.5 }}>
+                    Your corrective action has been submitted and is currently in the review queue. A designated Safety Officer or Administrator will inspect the evidence and verify completion before closing this task.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* 2. OFFICER / ADMIN VIEW: TASK IS PENDING VERIFICATION */}
+            {isPendingVerification && isAdmin && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '14px',
+                  padding: '16px',
+                  background: 'linear-gradient(135deg, #eff6ff 0%, #f8fafc 100%)',
+                  borderRadius: '10px',
+                  border: '1px solid #bfdbfe',
+                  marginTop: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <ShieldCheck size={20} color="var(--brand-primary)" />
+                    <span style={{ fontWeight: 800, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+                      Safety Officer / Admin Verification
+                    </span>
+                  </div>
+                  <span className="badge badge-warning" style={{ fontSize: '0.74rem', fontWeight: 700 }}>
+                    Verification Pending
+                  </span>
+                </div>
+
+                <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.45 }}>
+                  The assignee has completed corrective work and submitted proof for verification. Review the actions and photos above, then verify & approve completion or send back for rework.
+                </p>
+
+                {showReworkBox ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff1f2', padding: '14px', borderRadius: '8px', border: '1px solid #fecdd3' }}>
+                    <label className="form-label" style={{ fontWeight: 700, fontSize: '0.84rem', margin: 0, color: '#9f1239' }}>
+                      Reason for Requesting Rework <span className="required">*</span>
+                    </label>
+                    <textarea
+                      className="form-textarea"
+                      rows={3}
+                      placeholder="Specify what needs to be improved or re-done..."
+                      value={officerNotes}
+                      onChange={(e) => setOfficerNotes(e.target.value)}
+                      style={{ width: '100%', resize: 'vertical' }}
+                      autoFocus
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setShowReworkBox(false)}
+                        disabled={isSubmitting}
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        onClick={handleAdminRework}
+                        disabled={isSubmitting || !officerNotes.trim()}
+                        style={{ padding: '6px 18px', fontWeight: 700 }}
+                      >
+                        {isSubmitting ? 'Sending...' : 'Confirm Send for Rework'}
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      onClick={() => setShowReworkBox(true)}
+                      disabled={isSubmitting}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                    >
+                      <RotateCcw size={15} />
+                      <span>Request Rework</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="btn btn-success"
+                      onClick={handleAdminApprove}
+                      disabled={isSubmitting}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 20px', fontWeight: 700 }}
+                    >
+                      <CheckCircle2 size={16} />
+                      <span>{isSubmitting ? 'Verifying...' : 'Verify & Approve (Mark Completed)'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 3. AWAITING ASSIGNEE SUBMISSION (Viewed by Admin / Assigner when user hasn't submitted yet) */}
+            {!isPendingVerification && !isCompleted && !canSubmitAction && (
+              <div
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '8px',
+                  padding: '16px',
+                  background: 'rgba(2, 132, 199, 0.04)',
+                  borderRadius: '10px',
+                  border: '1px solid rgba(2, 132, 199, 0.2)',
+                  marginTop: '10px',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <Clock size={18} color="var(--brand-primary)" />
+                    <span style={{ fontWeight: 800, fontSize: '0.92rem', color: 'var(--text-primary)' }}>
+                      {isRework ? 'Rework In Progress — Awaiting Assignee Response' : 'Awaiting Assignee Action & Response'}
+                    </span>
+                  </div>
+                  <span className="badge badge-assigned" style={{ fontSize: '0.74rem', fontWeight: 600 }}>
+                    Assigned to: {assigneeName || `Emp #${task.assigned_to}`}
+                  </span>
+                </div>
+                <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
+                  {isRework
+                    ? `This task was sent back for rework. Waiting for ${assigneeName || 'the assigned employee'} to revise and resubmit their corrective action.`
+                    : `This observation task is currently assigned to ${assigneeName || 'the assigned employee'}. Corrective action and closure are awaiting the user's response submission. Once submitted, you will be able to verify and approve completion.`}
+                </p>
+              </div>
+            )}
+
+            {/* 4. ACTIVE TASK SUBMISSION SECTION (Only for the Assignee / Participant) */}
+            {!isPendingVerification && canAct && (
               <div
                 style={{
                   display: 'flex',
@@ -889,164 +1086,118 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     <label className="form-label" style={{ fontWeight: 700, fontSize: '0.85rem', margin: 0, color: 'var(--text-primary)' }}>
                       Task Resolution Stage <span className="required">*</span>
                     </label>
-
-                    {isAdmin && !isAssignee && task.status === 'SUBMITTED_FOR_REVIEW' && (
-                      <button
-                        type="button"
-                        className="btn-ghost"
-                        onClick={() => setShowReworkBox(!showReworkBox)}
-                        style={{ fontSize: '0.78rem', color: '#ea580c', fontWeight: 600, padding: '2px 8px' }}
-                      >
-                        <RotateCcw size={13} style={{ marginRight: '4px' }} />
-                        {showReworkBox ? 'Back to Approval' : 'Need Rework?'}
-                      </button>
-                    )}
                   </div>
 
-                  {showReworkBox ? (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', background: '#fff1f2', padding: '12px', borderRadius: '8px', border: '1px solid #fecdd3' }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0, color: '#9f1239' }}>
-                        Resubmit Reason / Feedback <span className="required">*</span>
-                      </label>
-                      <textarea
-                        className="form-textarea"
-                        rows={3}
-                        placeholder="Specify reason for rework..."
-                        value={officerNotes}
-                        onChange={(e) => setOfficerNotes(e.target.value)}
-                        style={{ width: '100%', resize: 'vertical' }}
-                        autoFocus
-                      />
-                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '4px' }}>
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm"
-                          onClick={() => setShowReworkBox(false)}
-                          disabled={isSubmitting}
-                        >
-                          Cancel
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          onClick={handleAdminRework}
-                          disabled={isSubmitting || !officerNotes.trim()}
-                          style={{ padding: '6px 18px' }}
-                        >
-                          {isSubmitting ? 'Sending...' : 'Confirm Resubmit'}
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
-                        <button
-                          type="button"
-                          onClick={() => setResolutionStage('PARTIALLY_DONE')}
-                          style={{
-                            padding: '10px 14px',
-                            borderRadius: '8px',
-                            border: resolutionStage === 'PARTIALLY_DONE' ? '2px solid #f59e0b' : '1px solid var(--border-subtle)',
-                            background: resolutionStage === 'PARTIALLY_DONE' ? '#fffbeb' : '#ffffff',
-                            color: resolutionStage === 'PARTIALLY_DONE' ? '#b45309' : 'var(--text-secondary)',
-                            fontWeight: 700,
-                            fontSize: '0.85rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <Clock size={16} color={resolutionStage === 'PARTIALLY_DONE' ? '#d97706' : '#64748b'} />
-                          <span>Partially Done</span>
-                        </button>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                    {/* Option 1: Partially Done (Available to all) */}
+                    <button
+                      type="button"
+                      onClick={() => setResolutionStage('PARTIALLY_DONE')}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: resolutionStage === 'PARTIALLY_DONE' ? '2px solid #f59e0b' : '1px solid var(--border-subtle)',
+                        background: resolutionStage === 'PARTIALLY_DONE' ? '#fffbeb' : '#ffffff',
+                        color: resolutionStage === 'PARTIALLY_DONE' ? '#b45309' : 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <Clock size={16} color={resolutionStage === 'PARTIALLY_DONE' ? '#d97706' : '#64748b'} />
+                      <span>Partially Done</span>
+                    </button>
 
-                        <button
-                          type="button"
-                          onClick={() => setResolutionStage('COMPLETED')}
-                          style={{
-                            padding: '10px 14px',
-                            borderRadius: '8px',
-                            border: resolutionStage === 'COMPLETED' ? '2px solid #10b981' : '1px solid var(--border-subtle)',
-                            background: resolutionStage === 'COMPLETED' ? '#ecfdf5' : '#ffffff',
-                            color: resolutionStage === 'COMPLETED' ? '#047857' : 'var(--text-secondary)',
-                            fontWeight: 700,
-                            fontSize: '0.85rem',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            gap: '8px',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          <CheckCircle2 size={16} color={resolutionStage === 'COMPLETED' ? '#10b981' : '#64748b'} />
-                          <span>Complete & Close Task</span>
-                        </button>
-                      </div>
+                    {/* Option 2: Submit for Verification (Always, since Section 4 is only for employees) */}
+                    <button
+                      type="button"
+                      onClick={() => setResolutionStage('SUBMITTED_FOR_REVIEW')}
+                      style={{
+                        padding: '10px 14px',
+                        borderRadius: '8px',
+                        border: resolutionStage === 'SUBMITTED_FOR_REVIEW' ? '2px solid var(--brand-primary)' : '1px solid var(--border-subtle)',
+                        background: resolutionStage === 'SUBMITTED_FOR_REVIEW' ? 'rgba(2, 132, 199, 0.08)' : '#ffffff',
+                        color: resolutionStage === 'SUBMITTED_FOR_REVIEW' ? 'var(--brand-primary)' : 'var(--text-secondary)',
+                        fontWeight: 700,
+                        fontSize: '0.85rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '8px',
+                        cursor: 'pointer',
+                      }}
+                    >
+                      <ShieldCheck size={16} color={resolutionStage === 'SUBMITTED_FOR_REVIEW' ? 'var(--brand-primary)' : '#64748b'} />
+                      <span>Submit for Verification</span>
+                    </button>
+                  </div>
 
-                      <span className="form-hint" style={{ fontSize: '0.74rem', marginTop: '6px', display: 'block' }}>
-                        {resolutionStage === 'PARTIALLY_DONE'
-                          ? 'Task will remain active (In Progress) with your updated progress remarks.'
-                          : 'Task will be marked as fully completed and closed.'}
-                      </span>
-                    </>
-                  )}
+                  <span className="form-hint" style={{ fontSize: '0.74rem', marginTop: '6px', display: 'block' }}>
+                    {resolutionStage === 'PARTIALLY_DONE'
+                      ? 'Task will remain active (In Progress) with your updated progress remarks.'
+                      : 'Task will be submitted to Safety Officer / Admin for review and verification.'}
+                  </span>
                 </div>
 
-                {!showReworkBox && (
-                  <>
-                    {/* Solution / Remarks Input */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0, color: 'var(--text-secondary)' }}>
-                        {resolutionStage === 'PARTIALLY_DONE' ? 'Progress Remarks & Work Done' : 'Corrective Solution Remarks'} <span className="required">*</span>
-                      </label>
-                      <textarea
-                        className="form-textarea"
-                        rows={3}
-                        placeholder={
-                          resolutionStage === 'PARTIALLY_DONE'
-                            ? 'Describe what has been completed so far, current stage, and next steps...'
-                            : 'Describe the finalized corrective engineering or permanent solution applied...'
-                        }
-                        value={solutionRemarks}
-                        onChange={(e) => setSolutionRemarks(e.target.value)}
-                        style={{ width: '100%', resize: 'vertical' }}
-                      />
-                    </div>
+                {/* Solution / Remarks Input */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0, color: 'var(--text-secondary)' }}>
+                    {resolutionStage === 'PARTIALLY_DONE' ? 'Progress Remarks & Work Done' : 'Corrective Action & Solution Details'} <span className="required">*</span>
+                  </label>
+                  <textarea
+                    className="form-textarea"
+                    rows={3}
+                    placeholder={
+                      resolutionStage === 'PARTIALLY_DONE'
+                        ? 'Describe what has been completed so far, current stage, and next steps...'
+                        : 'Describe the finalized corrective engineering, repairs or safety resolution applied...'
+                    }
+                    value={solutionRemarks}
+                    onChange={(e) => setSolutionRemarks(e.target.value)}
+                    style={{ width: '100%', resize: 'vertical' }}
+                  />
+                </div>
 
-                    {/* Evidence Photos */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0, color: 'var(--text-secondary)' }}>
-                        Evidence Photos (Optional)
-                      </label>
-                      <PhotoUploader
-                        photos={photos}
-                        onChange={setPhotos}
-                        maxPhotos={6}
-                        compact
-                      />
-                    </div>
+                {/* Evidence Photos */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0, color: 'var(--text-secondary)' }}>
+                    Evidence Photos (Optional)
+                  </label>
+                  <PhotoUploader
+                    photos={photos}
+                    onChange={setPhotos}
+                    maxPhotos={6}
+                    compact
+                  />
+                </div>
 
-                    {/* SINGLE SUBMISSION BUTTON */}
-                    <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                      <button
-                        type="button"
-                        className={`btn ${resolutionStage === 'COMPLETED' ? 'btn-success' : 'btn-primary'}`}
-                        onClick={handleUnifiedSubmit}
-                        disabled={isSubmitting || !solutionRemarks.trim()}
-                        style={{ padding: '9px 24px', fontWeight: 700, fontSize: '0.85rem' }}
-                      >
-                        {resolutionStage === 'COMPLETED' ? <CheckCircle2 size={16} /> : <Send size={16} />}
-                        <span>
-                          {isSubmitting
-                            ? 'Submitting...'
-                            : (resolutionStage === 'COMPLETED' ? 'Complete & Close Task' : 'Save as Partially Done')}
-                        </span>
-                      </button>
-                    </div>
-                  </>
-                )}
+                {/* SUBMISSION BUTTON */}
+                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
+                  <button
+                    type="button"
+                    className={`btn ${resolutionStage === 'SUBMITTED_FOR_REVIEW' ? 'btn-primary' : 'btn-warning'}`}
+                    onClick={handleUnifiedSubmit}
+                    disabled={isSubmitting || !solutionRemarks.trim()}
+                    style={{ padding: '9px 24px', fontWeight: 700, fontSize: '0.85rem' }}
+                  >
+                    {resolutionStage === 'SUBMITTED_FOR_REVIEW' ? (
+                      <ShieldCheck size={16} />
+                    ) : (
+                      <Clock size={16} />
+                    )}
+                    <span>
+                      {isSubmitting
+                        ? 'Submitting...'
+                        : (resolutionStage === 'SUBMITTED_FOR_REVIEW'
+                            ? 'Submit for Verification'
+                            : 'Save as Partially Done')}
+                    </span>
+                  </button>
+                </div>
               </div>
             )}
 

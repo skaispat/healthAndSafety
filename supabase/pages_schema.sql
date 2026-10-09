@@ -139,7 +139,7 @@ $$ LANGUAGE plpgsql;
 DROP TRIGGER IF EXISTS update_observations_modtime ON public.observations;
 CREATE TRIGGER update_observations_modtime
     BEFORE UPDATE ON public.observations
-    FOR EACH ROW
+    FOR EACH ROW    
     EXECUTE FUNCTION trg_update_observation_timestamp();
 
 -- 8. ROW LEVEL SECURITY (RLS) & GRANTS

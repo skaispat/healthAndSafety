@@ -77,7 +77,7 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
   onClose,
   onTaskCreated,
 }) => {
-  const { currentUser } = useAuth();
+  const { currentUser, isOfficer } = useAuth();
   const { showToast } = useToast();
 
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -89,12 +89,10 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
   const [solutionText, setSolutionText] = useState('');
   const [priority, setPriority] = useState<PriorityLevel>('MEDIUM');
   const [photos, setPhotos] = useState<UploadedPhoto[]>([]);
+  const [submissionType, setSubmissionType] = useState<'ACTIVE' | 'SUBMIT_FOR_VERIFICATION'>('ACTIVE');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const currentEmpId = Number(currentUser?.emp_id || currentUser?.id || 101);
-  const currentOfficerName = (!currentUser?.full_name || currentUser.full_name.toLowerCase() === 'admin')
-    ? 'Safety Officer'
-    : currentUser.full_name;
 
   useEffect(() => {
     if (isOpen) {
@@ -123,34 +121,54 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
       return;
     }
 
+    if (submissionType === 'SUBMIT_FOR_VERIFICATION' && !solutionText.trim()) {
+      showToast({
+        type: 'warning',
+        title: 'Solution Remarks Required',
+        message: 'Please specify the corrective action performed before submitting for verification.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      // Internal submission: automatically assigned to himself, target due date 3 days ahead
       const internalDueDate = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+      const isSubmittingForVerification = submissionType === 'SUBMIT_FOR_VERIFICATION';
 
       await DataService.createObservationWithTask({
         department_id: Number(departmentId),
         area: area.trim(),
         observation_text: observationText.trim(),
         solution_text: solutionText.trim(),
-        assigned_to: currentEmpId, // Internal assignment to himself
-        due_date: internalDueDate, // Internal target due date
+        assigned_to: currentEmpId, // Internal assignment to self
+        due_date: internalDueDate,
         priority,
         photo_urls: photos.map((p) => ({ url: p.url, file_name: p.file_name })),
         officer_id: currentEmpId,
+        initialStatus: isSubmittingForVerification ? 'SUBMITTED_FOR_REVIEW' : 'ASSIGNED',
+        corrective_action: isSubmittingForVerification ? (solutionText.trim() || 'Corrective action executed and submitted for verification') : undefined,
       });
 
-      showToast({
-        type: 'success',
-        title: 'Task Created',
-        message: 'Task added to observations and assigned to yourself.',
-      });
+      if (isSubmittingForVerification) {
+        showToast({
+          type: 'success',
+          title: 'Task Submitted for Verification',
+          message: 'Task added and submitted! Pending verification by Safety Officer / Admin.',
+        });
+      } else {
+        showToast({
+          type: 'success',
+          title: 'Task Created',
+          message: 'Task added to observations and assigned to yourself.',
+        });
+      }
 
       // Reset fields
       setArea('');
       setObservationText('');
       setSolutionText('');
       setPhotos([]);
+      setSubmissionType('ACTIVE');
       onTaskCreated();
       onClose();
     } catch (err: any) {
@@ -168,7 +186,7 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Add Officer Task"
+      title={isOfficer ? "Add Officer Task" : "Add Task"}
       subtitle={`Logged on ${formatISTDateTime(new Date())}`}
       size="lg"
     >
@@ -271,6 +289,7 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
               <input
                 type="text"
                 className="form-input"
+                placeholder="e.g. Broken handrail on staircase, oil leakage near motor"
                 value={observationText}
                 onChange={(e) => setObservationText(e.target.value)}
                 required
@@ -278,23 +297,87 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
             </div>
 
             <div className="form-group">
-              <label className="form-label">Description of Observation</label>
+              <label className="form-label">
+                {submissionType === 'SUBMIT_FOR_VERIFICATION' ? 'Corrective Action Taken & Resolution Remarks *' : 'Description of Observation / Recommended Action'}
+              </label>
               <textarea
                 className="form-textarea"
                 rows={2}
-                placeholder="Specify recommended corrective engineering or containment action..."
+                placeholder={submissionType === 'SUBMIT_FOR_VERIFICATION' ? 'Detail the exact repair or containment action executed...' : 'Specify recommended corrective engineering or containment action...'}
                 value={solutionText}
                 onChange={(e) => setSolutionText(e.target.value)}
+                required={submissionType === 'SUBMIT_FOR_VERIFICATION'}
               />
             </div>
           </div>
 
-          {/* STEP 4: PHOTOS */}
-          <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px' }}>
+          {/* STEP 4: SUBMISSION STAGE CHOICE */}
+          <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '16px' }}>
             <ModalStepHeader
               step={4}
-              title="Initial Photographic Evidence"
-              subtitle="Visual proof of hazard condition before work order is initiated"
+              title="Task Submission Type"
+              subtitle="Choose whether to save as an active task or submit directly for officer verification"
+              icon={<Clock size={16} />}
+            />
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+              <button
+                type="button"
+                onClick={() => setSubmissionType('ACTIVE')}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  border: submissionType === 'ACTIVE' ? '2px solid var(--brand-secondary)' : '1px solid var(--border-subtle)',
+                  background: submissionType === 'ACTIVE' ? 'rgba(2, 132, 199, 0.08)' : '#ffffff',
+                  color: submissionType === 'ACTIVE' ? 'var(--brand-secondary)' : 'var(--text-secondary)',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                }}
+              >
+                <Clock size={16} />
+                <span>Save as Active Task</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setSubmissionType('SUBMIT_FOR_VERIFICATION')}
+                style={{
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  border: submissionType === 'SUBMIT_FOR_VERIFICATION' ? '2px solid #f59e0b' : '1px solid var(--border-subtle)',
+                  background: submissionType === 'SUBMIT_FOR_VERIFICATION' ? '#fffbeb' : '#ffffff',
+                  color: submissionType === 'SUBMIT_FOR_VERIFICATION' ? '#b45309' : 'var(--text-secondary)',
+                  fontWeight: 700,
+                  fontSize: '0.85rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: '8px',
+                  cursor: 'pointer',
+                }}
+              >
+                <ShieldCheck size={16} />
+                <span>Submit for Verification</span>
+              </button>
+            </div>
+
+            <span className="form-hint" style={{ fontSize: '0.74rem', marginTop: '8px', display: 'block' }}>
+              {submissionType === 'ACTIVE'
+                ? 'Task will be saved as Active (Assigned to you). You can work on it and submit evidence later.'
+                : 'Task will be created and immediately submitted as Pending Verification for Safety Officer / Admin inspection and sign-off.'}
+            </span>
+          </div>
+
+          {/* STEP 5: PHOTOS */}
+          <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: '10px', padding: '14px' }}>
+            <ModalStepHeader
+              step={5}
+              title={submissionType === 'SUBMIT_FOR_VERIFICATION' ? "Evidence Photos (Before & After)" : "Initial Photographic Evidence"}
+              subtitle={submissionType === 'SUBMIT_FOR_VERIFICATION' ? "Attach visual proof of the hazard and the corrective resolution" : "Visual proof of hazard condition before work order is initiated"}
               icon={<Camera size={16} />}
             />
             <PhotoUploader photos={photos} onChange={setPhotos} maxPhotos={10} />
@@ -305,9 +388,16 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
             <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
-            <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-              <Send size={16} />
-              {isSubmitting ? 'Creating...' : 'Create Task'}
+            <button
+              type="submit"
+              className={`btn ${submissionType === 'SUBMIT_FOR_VERIFICATION' ? 'btn-primary' : 'btn-primary'}`}
+              disabled={isSubmitting}
+              style={{ fontWeight: 700 }}
+            >
+              {submissionType === 'SUBMIT_FOR_VERIFICATION' ? <ShieldCheck size={16} /> : <Send size={16} />}
+              {isSubmitting
+                ? 'Saving...'
+                : (submissionType === 'SUBMIT_FOR_VERIFICATION' ? 'Submit for Verification' : 'Create Task')}
             </button>
           </div>
         </div>

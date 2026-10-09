@@ -1,14 +1,14 @@
-import { 
-  Department, 
-  User, 
-  Observation, 
-  Task, 
-  CorrectiveAction, 
-  TaskHistory, 
+import {
+  Department,
+  User,
+  Observation,
+  Task,
+  CorrectiveAction,
+  TaskHistory,
   ObservationHistoryItem,
-  TaskParticipant, 
-  TaskMessage, 
-  Notification, 
+  TaskParticipant,
+  TaskMessage,
+  Notification,
   TrainingRecord,
   PriorityLevel,
   TaskStatus,
@@ -239,6 +239,15 @@ export const DataService = {
     });
   },
 
+  async getSafetyOfficers(): Promise<User[]> {
+    const users = await this.getUsers();
+    return users.filter(u => {
+      const pos = String(u.position || '').trim().toUpperCase();
+      const role = String(u.role || '').trim().toUpperCase();
+      return pos === 'HEALTH AND SAFETY' || role === 'HEALTH_SAFETY_OFFICER' || role === 'ADMIN';
+    });
+  },
+
   // -------------------------------------------------------------
   // UNIFIED OBSERVATIONS (Single Table for Observations & Assigned Tasks)
   // -------------------------------------------------------------
@@ -306,13 +315,13 @@ export const DataService = {
       const rawDeptName = obs.department?.dept_name || obs.department?.name;
       const matchedDept = obs.department && rawDeptName
         ? {
-            dept_id: Number(obs.department.dept_id),
-            dept_name: rawDeptName,
-            id: String(obs.department.dept_id),
-            name: rawDeptName,
-            code: obs.department.code,
-            is_active: obs.department.is_active !== false,
-          }
+          dept_id: Number(obs.department.dept_id),
+          dept_name: rawDeptName,
+          id: String(obs.department.dept_id),
+          name: rawDeptName,
+          code: obs.department.code,
+          is_active: obs.department.is_active !== false,
+        }
         : depts.find(d => d.dept_id === deptIdNum);
 
       const creator = users.find(u => u.emp_id === createdByNum);
@@ -548,6 +557,8 @@ export const DataService = {
     priority: PriorityLevel;
     photo_urls: { url: string; file_name: string }[];
     officer_id: string | number; // creator's emp_id
+    initialStatus?: ObservationStatus;
+    corrective_action?: string;
   }): Promise<{ observation: Observation; task: Task }> {
     const now = new Date().toISOString();
     const obsId = crypto.randomUUID();
@@ -566,13 +577,16 @@ export const DataService = {
     const creator = users.find(u => u.emp_id === createdByNum);
     const assignee = users.find(u => u.emp_id === assignedToNum);
 
+    const targetStatus: ObservationStatus = params.initialStatus || 'ASSIGNED';
+    const isSubmittedForReview = targetStatus === 'SUBMITTED_FOR_REVIEW';
+
     const photos: any[] = params.photo_urls.map((p, idx) => ({
       id: crypto.randomUUID(),
       observation_id: obsId,
       photo_url: p.url,
       url: p.url,
       file_name: p.file_name || `photo_${idx + 1}.jpg`,
-      photo_type: 'INITIAL',
+      photo_type: isSubmittedForReview ? 'CORRECTIVE' : 'INITIAL',
       uploaded_by: createdByNum,
       created_at: now
     }));
@@ -591,7 +605,8 @@ export const DataService = {
       risk_max: risk.max,
       assigned_to: assignedToNum,
       due_date: params.due_date,
-      status: 'ASSIGNED',
+      status: targetStatus,
+      corrective_action: isSubmittedForReview ? (params.corrective_action || params.solution_text || 'Submitted for verification') : null,
       is_personal: false,
       created_at: now,
       updated_at: now,
@@ -600,6 +615,7 @@ export const DataService = {
       assignee,
       photos,
       initial_photos: photos,
+      corrective_photos: isSubmittedForReview ? photos : [],
       all_photos: photos,
     };
 
@@ -609,7 +625,7 @@ export const DataService = {
       observation_id: obsId,
       assigned_to: assignedToNum,
       assigned_by: createdByNum,
-      status: 'ASSIGNED',
+      status: targetStatus,
       due_date: params.due_date,
       created_at: now,
       updated_at: now,
@@ -617,22 +633,57 @@ export const DataService = {
       assigner: creator,
       photos,
       initial_photos: photos,
+      corrective_photos: isSubmittedForReview ? photos : [],
       all_photos: photos,
     };
     newObservation.task = taskObj;
 
-    // Notification for the assigned employee
-    const newNotification: Notification = {
-      id: crypto.randomUUID(),
-      user_id: assignedToNum,
-      observation_id: obsId,
-      task_id: obsId,
-      notification_type: 'TASK_ASSIGNED',
-      title: `New Safety Task: ${obsNumber}`,
-      message: `You have been assigned: ${params.observation_text.slice(0, 80)}... Area: ${params.area}`,
-      is_read: false,
-      created_at: now
-    };
+    // Notifications to dispatch
+    const notificationsToDispatch: Notification[] = [];
+    if (isSubmittedForReview) {
+      // Notify Safety Officers / Admins about the submission pending verification
+      const officers = await this.getSafetyOfficers();
+      officers.forEach(off => {
+        if (Number(off.emp_id) !== createdByNum) {
+          notificationsToDispatch.push({
+            id: crypto.randomUUID(),
+            user_id: Number(off.emp_id),
+            observation_id: obsId,
+            task_id: obsId,
+            notification_type: 'CORRECTIVE_SUBMITTED',
+            title: `Task Awaiting Verification: ${obsNumber}`,
+            message: `${creator?.full_name || 'Employee'} added and submitted a task for verification: "${params.observation_text.slice(0, 60)}"`,
+            is_read: false,
+            created_at: now
+          });
+        }
+      });
+      // Also confirm to the creator
+      notificationsToDispatch.push({
+        id: crypto.randomUUID(),
+        user_id: createdByNum,
+        observation_id: obsId,
+        task_id: obsId,
+        notification_type: 'TASK_ASSIGNED',
+        title: `Task Submitted for Verification: ${obsNumber}`,
+        message: `Your task has been submitted and is pending verification by the Safety Officer / Admin.`,
+        is_read: false,
+        created_at: now
+      });
+    } else {
+      // Standard assignment notification
+      notificationsToDispatch.push({
+        id: crypto.randomUUID(),
+        user_id: assignedToNum,
+        observation_id: obsId,
+        task_id: obsId,
+        notification_type: 'TASK_ASSIGNED',
+        title: `New Safety Task: ${obsNumber}`,
+        message: `You have been assigned: ${params.observation_text.slice(0, 80)}... Area: ${params.area}`,
+        is_read: false,
+        created_at: now
+      });
+    }
 
     // Supabase push directly into unified tables
     if (isSupabaseConfigured() && supabase) {
@@ -649,7 +700,8 @@ export const DataService = {
           risk_max: risk.max,
           assigned_to: assignedToNum,
           due_date: params.due_date,
-          status: 'ASSIGNED',
+          status: targetStatus,
+          corrective_action: isSubmittedForReview ? (params.corrective_action || params.solution_text || 'Submitted for verification') : null,
           is_personal: false
         }]);
 
@@ -663,7 +715,7 @@ export const DataService = {
             observation_id: obsId,
             photo_url: p.photo_url,
             file_name: p.file_name,
-            photo_type: 'INITIAL',
+            photo_type: isSubmittedForReview ? 'CORRECTIVE' : 'INITIAL',
             uploaded_by: createdByNum
           })));
           if (photoInsertErr) {
@@ -671,34 +723,35 @@ export const DataService = {
           }
         }
 
-        const { error: notifInsertErr } = await supabase.from('notifications').insert([{
-          id: newNotification.id,
-          user_id: assignedToNum,
-          observation_id: obsId,
-          notification_type: 'TASK_ASSIGNED',
-          title: newNotification.title,
-          message: newNotification.message,
-          is_read: false
-        }]);
-        if (notifInsertErr) {
-          console.error('Supabase insert notification error:', notifInsertErr);
+        if (notificationsToDispatch.length > 0) {
+          await supabase.from('notifications').insert(notificationsToDispatch.map(n => ({
+            id: n.id,
+            user_id: n.user_id,
+            observation_id: obsId,
+            notification_type: n.notification_type,
+            title: n.title,
+            message: n.message,
+            is_read: false
+          })));
         }
       } catch (err) {
         console.warn('Supabase insert observation error', err);
       }
     }
 
-    // Record initial history event for tracking loop
+    // Record history event
     const initialHistoryItem: ObservationHistoryItem = {
       id: crypto.randomUUID(),
       observation_id: obsId,
-      action_type: 'ASSIGNED',
+      action_type: isSubmittedForReview ? 'SUBMITTED_FOR_REVIEW' : 'ASSIGNED',
       attempt_number: 1,
-      description: `Safety observation logged and task assigned to ${assignee?.full_name || 'employee'} (Emp ID: ${assignedToNum}).`,
+      description: isSubmittedForReview
+        ? `Task logged by ${creator?.full_name || 'employee'} and submitted for Safety Officer / Admin verification.`
+        : `Safety observation logged and task assigned to ${assignee?.full_name || 'employee'} (Emp ID: ${assignedToNum}).`,
       rework_reason: null,
       performed_by: createdByNum,
       previous_status: null,
-      new_status: 'ASSIGNED',
+      new_status: targetStatus,
       photos: params.photo_urls,
       created_at: now
     };
@@ -709,7 +762,7 @@ export const DataService = {
     setStored(STORAGE_KEYS.OBSERVATIONS, [newObservation, ...storedObs]);
 
     const storedNotifs = getStored<Notification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
-    setStored(STORAGE_KEYS.NOTIFICATIONS, [newNotification, ...storedNotifs]);
+    setStored(STORAGE_KEYS.NOTIFICATIONS, [...notificationsToDispatch, ...storedNotifs]);
 
     return { observation: newObservation, task: taskObj };
   },
@@ -853,7 +906,7 @@ export const DataService = {
     action_description: string;
     photos: { url: string; file_name: string }[];
     markAsCompleted?: boolean;
-    stage?: 'PARTIALLY_DONE' | 'COMPLETED';
+    stage?: 'PARTIALLY_DONE' | 'COMPLETED' | 'SUBMITTED_FOR_REVIEW';
   }): Promise<CorrectiveAction> {
     const obs = await this.getObservationById(params.task_id);
     if (!obs) throw new Error('Observation task not found');
@@ -926,21 +979,49 @@ export const DataService = {
           if (photoErr) console.error('Supabase insert corrective photos error:', photoErr);
         }
 
-        // Notify creator (Safety Officer)
+        // Determine recipient IDs to notify: original creator and all safety officers/admins
+        const officers = await this.getSafetyOfficers();
+        const recipientIds = new Set<number>();
+        if (Number(obs.created_by) !== employeeEmpId) {
+          recipientIds.add(Number(obs.created_by));
+        }
+        officers.forEach(o => {
+          if (Number(o.emp_id) !== employeeEmpId) {
+            recipientIds.add(Number(o.emp_id));
+          }
+        });
+        if (recipientIds.size === 0) {
+          recipientIds.add(Number(obs.created_by));
+        }
+
         const notifType = params.markAsCompleted ? 'TASK_COMPLETED' : 'CORRECTIVE_SUBMITTED';
         const notifTitle = params.markAsCompleted
           ? `Task Completed (${obs.observation_number || 'OBS'})`
-          : `Corrective Action Submitted — Attempt #${attemptNumber} (${obs.observation_number || 'OBS'})`;
+          : `Task Verification Pending — Attempt #${attemptNumber} (${obs.observation_number || 'OBS'})`;
 
-        const { error: notifErr } = await supabase.from('notifications').insert([{
+        const notifMsg = `Assignee submitted Attempt #${attemptNumber} remarks: "${params.action_description.slice(0, 80)}"`;
+
+        const notificationsList: Notification[] = Array.from(recipientIds).map(uid => ({
           id: crypto.randomUUID(),
-          user_id: Number(obs.created_by),
+          user_id: uid,
           observation_id: obs.id,
+          task_id: obs.id,
           notification_type: notifType,
           title: notifTitle,
-          message: `Assignee submitted Attempt #${attemptNumber} remarks: "${params.action_description.slice(0, 80)}"`,
+          message: notifMsg,
+          is_read: false,
+          created_at: now
+        }));
+
+        const { error: notifErr } = await supabase.from('notifications').insert(notificationsList.map(n => ({
+          id: n.id,
+          user_id: n.user_id,
+          observation_id: obs.id,
+          notification_type: n.notification_type,
+          title: n.title,
+          message: n.message,
           is_read: false
-        }]);
+        })));
         if (notifErr) console.warn('Supabase corrective notification error:', notifErr);
       } catch (err) {
         console.warn('Supabase submit corrective error', err);
@@ -963,19 +1044,35 @@ export const DataService = {
       setStored(STORAGE_KEYS.OBSERVATIONS, obsList);
     }
 
-    const newNotif: Notification = {
+    // Local notifications dispatch for offline/cache consistency
+    const officersLocal = await this.getSafetyOfficers();
+    const localRecipientIds = new Set<number>();
+    if (Number(obs.created_by) !== employeeEmpId) {
+      localRecipientIds.add(Number(obs.created_by));
+    }
+    officersLocal.forEach(o => {
+      if (Number(o.emp_id) !== employeeEmpId) {
+        localRecipientIds.add(Number(o.emp_id));
+      }
+    });
+    if (localRecipientIds.size === 0) {
+      localRecipientIds.add(Number(obs.created_by));
+    }
+
+    const localNotifs: Notification[] = Array.from(localRecipientIds).map(uid => ({
       id: crypto.randomUUID(),
-      user_id: Number(obs.created_by),
+      user_id: uid,
       observation_id: obs.id,
       task_id: obs.id,
       notification_type: 'CORRECTIVE_SUBMITTED',
-      title: `Corrective Action (Attempt #${attemptNumber}) Submitted (${obs.observation_number})`,
-      message: `Assignee submitted corrective proof for review.`,
+      title: `Task Verification Pending — Attempt #${attemptNumber} (${obs.observation_number})`,
+      message: `Assignee submitted corrective proof for verification.`,
       is_read: false,
       created_at: now
-    };
+    }));
+
     const storedNotifs = getStored<Notification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
-    setStored(STORAGE_KEYS.NOTIFICATIONS, [newNotif, ...storedNotifs]);
+    setStored(STORAGE_KEYS.NOTIFICATIONS, [...localNotifs, ...storedNotifs]);
 
     return {
       id: actionRecordId,

@@ -31,9 +31,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const savedUserId = localStorage.getItem(ACTIVE_USER_ID_KEY) || localStorage.getItem('ehs_logged_in_emp_id');
       if (savedUserId) {
-        const active = users.find(u => 
-          Number(u.emp_id) === Number(savedUserId) || 
-          String(u.emp_id) === String(savedUserId) || 
+        const active = users.find(u =>
+          Number(u.emp_id) === Number(savedUserId) ||
+          String(u.emp_id) === String(savedUserId) ||
           String(u.id) === String(savedUserId) ||
           String(u.username)?.toLowerCase() === String(savedUserId).toLowerCase()
         );
@@ -60,7 +60,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               parsed.role = isOfficerRole ? 'HEALTH_SAFETY_OFFICER' : 'EMPLOYEE';
               setCurrentUser(parsed);
               localStorage.setItem('ehs_user_role', parsed.role);
-            } catch (_) {}
+            } catch (_) { }
           }
         }
       }
@@ -195,8 +195,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // 2. Local users list fallback
     const allUsers = usersList.length > 0 ? usersList : await DataService.getUsers();
-    const matched = allUsers.find(u => 
-      u.username?.toLowerCase() === term.toLowerCase() || 
+    const matched = allUsers.find(u =>
+      u.username?.toLowerCase() === term.toLowerCase() ||
       String(u.emp_id) === term ||
       Number(u.emp_id) === Number(term)
     );
@@ -229,7 +229,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = () => {
     if (isSupabaseConfigured() && supabase) {
-      supabase.auth.signOut().catch(() => {});
+      supabase.auth.signOut().catch(() => { });
     }
     localStorage.removeItem(ACTIVE_USER_ID_KEY);
     localStorage.removeItem('ehs_logged_in_emp_id');

@@ -15,6 +15,7 @@ import {
   Search,
   PlusCircle,
   Eye,
+  ShieldCheck,
 } from 'lucide-react';
 import { formatISTDate } from '../../utils/dateUtils';
 
@@ -26,10 +27,11 @@ export const MyTasksPage: React.FC = () => {
   const [tasks, setTasks] = useState<Task[]>([]);
   const [allTasksCount, setAllTasksCount] = useState(0);
   const [userAssignedCount, setUserAssignedCount] = useState(0);
+  const [verificationCount, setVerificationCount] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
 
-  // Officer scope: 'MINE' (Assigned to Myself) | 'ALL' (All Plant Tasks)
-  const [officerScope, setOfficerScope] = useState<'MINE' | 'ALL'>('MINE');
+  // Officer scope: 'MINE' (Assigned to Myself) | 'VERIFICATION' (Pending Verification) | 'ALL' (All Plant Tasks)
+  const [officerScope, setOfficerScope] = useState<'MINE' | 'VERIFICATION' | 'ALL'>('MINE');
 
   // Modals & Selection
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -59,12 +61,22 @@ export const MyTasksPage: React.FC = () => {
       return assignedToNum === currentEmpId;
     });
 
+    const verificationTasks = all.filter((t) => t.status === 'SUBMITTED_FOR_REVIEW');
+
     setAllTasksCount(all.length);
     setUserAssignedCount(userOnlyTasks.length);
+    setVerificationCount(verificationTasks.length);
 
     // If role is employee, show only tasks assigned to them.
-    // If officer, show their assigned tasks ('MINE') or all tasks ('ALL').
-    const scopedTasks = isUserRole ? userOnlyTasks : (officerScope === 'MINE' ? userOnlyTasks : all);
+    // If officer, show their assigned tasks ('MINE'), pending verification queue ('VERIFICATION'), or all tasks ('ALL').
+    let scopedTasks: Task[] = [];
+    if (isUserRole) {
+      scopedTasks = userOnlyTasks;
+    } else {
+      if (officerScope === 'MINE') scopedTasks = userOnlyTasks;
+      else if (officerScope === 'VERIFICATION') scopedTasks = verificationTasks;
+      else scopedTasks = all;
+    }
     setTasks(scopedTasks);
 
     const paramTaskId = searchParams.get('taskId');
@@ -111,7 +123,7 @@ export const MyTasksPage: React.FC = () => {
     { key: 'ALL', label: 'All Tasks', dotColor: '#64748b', count: tasks.length },
     { key: 'ACTIVE', label: 'Active', dotColor: '#0284c7', count: tasks.filter((t) => (t.status === 'ASSIGNED' || t.status === 'IN_PROGRESS' || t.status === 'OPEN') && !(new Date(t.due_date).getTime() < Date.now())).length },
     { key: 'REWORK_REQUIRED', label: 'Rework Required', dotColor: '#f97316', count: tasks.filter((t) => t.status === 'REWORK_REQUIRED').length },
-    { key: 'SUBMITTED_FOR_REVIEW', label: 'Awaiting Review', dotColor: '#f59e0b', count: tasks.filter((t) => t.status === 'SUBMITTED_FOR_REVIEW').length },
+    { key: 'SUBMITTED_FOR_REVIEW', label: 'Pending Verification', dotColor: '#f59e0b', count: tasks.filter((t) => t.status === 'SUBMITTED_FOR_REVIEW').length },
     { key: 'OVERDUE', label: 'Overdue', dotColor: '#ef4444', count: tasks.filter((t) => (t.status === 'OVERDUE' || (new Date(t.due_date).getTime() < Date.now() && t.status !== 'COMPLETED' && t.status !== 'CLOSED'))).length },
     { key: 'COMPLETED', label: 'Completed', dotColor: '#10b981', count: tasks.filter((t) => t.status === 'COMPLETED' || t.status === 'CLOSED').length },
   ];
@@ -132,7 +144,7 @@ export const MyTasksPage: React.FC = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-              {!isUserRole ? 'Officer Tasks' : 'My Assigned Tasks'}
+              {!isUserRole ? 'Officer Tasks & Verification' : 'My Assigned Tasks'}
             </h2>
             <span
               className="badge badge-assigned"
@@ -141,6 +153,119 @@ export const MyTasksPage: React.FC = () => {
               Emp ID: {currentEmpId}
             </span>
           </div>
+
+          {!isUserRole && (
+            <div
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                background: 'var(--bg-surface-elevated)',
+                border: '1px solid var(--border-subtle)',
+                borderRadius: '8px',
+                padding: '3px',
+                gap: '4px',
+                marginTop: '10px',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setOfficerScope('MINE')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  fontWeight: officerScope === 'MINE' ? 700 : 500,
+                  border: 'none',
+                  background: officerScope === 'MINE' ? 'var(--brand-primary)' : 'transparent',
+                  color: officerScope === 'MINE' ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>My Assigned</span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                    background: officerScope === 'MINE' ? 'rgba(255,255,255,0.25)' : 'var(--border-subtle)',
+                    color: officerScope === 'MINE' ? '#ffffff' : 'var(--text-muted)',
+                  }}
+                >
+                  {userAssignedCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setOfficerScope('VERIFICATION');
+                  setFilter('ALL');
+                }}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  fontWeight: officerScope === 'VERIFICATION' ? 700 : 500,
+                  border: 'none',
+                  background: officerScope === 'VERIFICATION' ? '#f59e0b' : 'transparent',
+                  color: officerScope === 'VERIFICATION' ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <ShieldCheck size={13} />
+                <span>Pending Verification</span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                    background: officerScope === 'VERIFICATION' ? 'rgba(255,255,255,0.3)' : 'rgba(245, 158, 11, 0.15)',
+                    color: officerScope === 'VERIFICATION' ? '#ffffff' : '#b45309',
+                    fontWeight: 700,
+                  }}
+                >
+                  {verificationCount}
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setOfficerScope('ALL')}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  fontSize: '0.78rem',
+                  fontWeight: officerScope === 'ALL' ? 700 : 500,
+                  border: 'none',
+                  background: officerScope === 'ALL' ? 'var(--brand-primary)' : 'transparent',
+                  color: officerScope === 'ALL' ? '#ffffff' : 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <span>All Plant Tasks</span>
+                <span
+                  style={{
+                    fontSize: '0.7rem',
+                    padding: '1px 6px',
+                    borderRadius: '999px',
+                    background: officerScope === 'ALL' ? 'rgba(255,255,255,0.25)' : 'var(--border-subtle)',
+                    color: officerScope === 'ALL' ? '#ffffff' : 'var(--text-muted)',
+                  }}
+                >
+                  {allTasksCount}
+                </span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Top Actions */}
@@ -265,6 +390,7 @@ export const MyTasksPage: React.FC = () => {
               {filteredTasks.map((task, index) => {
                 const isPastDue = new Date(task.due_date).getTime() < Date.now();
                 const isOverdue = isPastDue && task.status !== 'COMPLETED' && task.status !== 'CLOSED';
+                const isPendingVerification = task.status === 'SUBMITTED_FOR_REVIEW';
 
                 return (
                   <tr
@@ -272,7 +398,10 @@ export const MyTasksPage: React.FC = () => {
                     onClick={() => setSelectedTask(task)}
                     style={{
                       cursor: 'pointer',
-                      background: isOverdue ? 'rgba(239, 68, 68, 0.04)' : undefined,
+                      background: isOverdue
+                        ? 'rgba(239, 68, 68, 0.04)'
+                        : (isPendingVerification ? 'rgba(245, 158, 11, 0.05)' : undefined),
+                      borderLeft: isPendingVerification ? '4px solid #f59e0b' : undefined,
                     }}
                   >
                     {/* Sr No */}
@@ -346,17 +475,39 @@ export const MyTasksPage: React.FC = () => {
 
                     {/* Action */}
                     <td style={{ textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        className="btn-ghost"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedTask(task);
-                        }}
-                        style={{ fontSize: '0.78rem', color: 'var(--brand-primary)', fontWeight: 700 }}
-                      >
-                        View / Update →
-                      </button>
+                      {!isUserRole && isPendingVerification ? (
+                        <button
+                          type="button"
+                          className="btn btn-warning btn-xs"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTask(task);
+                          }}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '5px',
+                            fontWeight: 700,
+                            padding: '4px 10px',
+                            fontSize: '0.76rem',
+                          }}
+                        >
+                          <ShieldCheck size={13} />
+                          <span>Inspect & Verify →</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          className="btn-ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedTask(task);
+                          }}
+                          style={{ fontSize: '0.78rem', color: 'var(--brand-primary)', fontWeight: 700 }}
+                        >
+                          {!isUserRole ? 'View Details →' : 'Update Task →'}
+                        </button>
+                      )}
                     </td>
                   </tr>
                 );

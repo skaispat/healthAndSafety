@@ -24,11 +24,11 @@ export const AwaitingReviewPage: React.FC = () => {
     <div className="page-wrapper">
       <div style={{ marginBottom: '24px' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <Clock size={24} color="#fbbf24" />
-          <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Tasks Awaiting Safety Officer Review</h2>
+          <Clock size={24} color="#f59e0b" />
+          <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Tasks Pending Safety Officer / Admin Verification</h2>
         </div>
         <p style={{ color: 'var(--text-secondary)', fontSize: '0.85rem', marginTop: '2px' }}>
-          Employees have executed corrective actions and submitted photographic evidence for officer sign-off.
+          Employees have executed corrective actions and submitted photographic evidence for Safety Officer or Admin verification.
         </p>
       </div>
 

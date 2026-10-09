@@ -58,9 +58,12 @@ export const StatusBadge: React.FC<StatusBadgeProps> = ({ status }) => {
       );
     case 'SUBMITTED_FOR_REVIEW':
       return (
-        <span className="badge badge-submitted-review">
-          <Send size={13} />
-          AWAITING REVIEW
+        <span
+          className="badge badge-submitted-review"
+          style={{ background: '#fef3c7', color: '#b45309', borderColor: '#fde68a', fontWeight: 700 }}
+        >
+          <Clock size={13} />
+          PENDING VERIFICATION
         </span>
       );
     case 'REWORK_REQUIRED':

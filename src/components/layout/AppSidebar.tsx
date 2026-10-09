@@ -9,7 +9,8 @@ import {
   Clock,
   BarChart3,
   Bell,
-  X
+  X,
+  ShieldCheck
 } from 'lucide-react';
 
 interface AppSidebarProps {
@@ -101,7 +102,13 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
                 <span>My Assigned Tasks</span>
               </NavLink>
 
-              {/* 4. Reports & Audits */}
+              {/* 4. Pending Verification Queue */}
+              <NavLink to="/tasks/awaiting-review" className={navLinkClass} onClick={onClose}>
+                <ShieldCheck size={18} color="#f59e0b" />
+                <span>Pending Verification</span>
+              </NavLink>
+
+              {/* 5. Reports & Audits */}
               <NavLink to="/reports" className={navLinkClass} onClick={onClose}>
                 <BarChart3 size={18} />
                 <span>Reports & Audits</span>
