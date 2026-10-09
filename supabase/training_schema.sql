@@ -8,7 +8,8 @@ CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
 CREATE TABLE IF NOT EXISTS public.trainings (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    dept_id BIGINT NOT NULL REFERENCES public.departments(dept_id) ON DELETE RESTRICT,
+    dept_id BIGINT NOT NULL REFERENCES public.departments(dept_id),
+    dept_name TEXT NULL,
     area TEXT NOT NULL,
     training_topic TEXT NOT NULL,
     description TEXT NOT NULL,

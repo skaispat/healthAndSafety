@@ -113,7 +113,10 @@ export const ReportsPage: React.FC = () => {
       const rate = total > 0 ? Math.round((closed / total) * 100) : 100;
 
       const deptTrn = filteredTrainings.filter(
-        (t) => String(t.department_id || t.dept_id) === String(dept.dept_id)
+        (t) =>
+          String(t.department_id || t.dept_id) === String(dept.dept_id) ||
+          (t.dept_name && t.dept_name.toLowerCase() === (dept.name || dept.dept_name || '').toLowerCase()) ||
+          (t.department?.name && t.department.name.toLowerCase() === (dept.name || dept.dept_name || '').toLowerCase())
       );
       const trained = deptTrn.reduce((acc, t) => acc + (Number(t.number_of_persons) || 0), 0);
 

@@ -23,6 +23,7 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
 
   const [departments, setDepartments] = useState<Department[]>([]);
   const [departmentId, setDepartmentId] = useState('');
+  const [customDeptName, setCustomDeptName] = useState('');
   const [area, setArea] = useState('');
   const [trainingTopic, setTrainingTopic] = useState('');
   const [description, setDescription] = useState('');
@@ -42,7 +43,7 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
         const active = depts.filter((d) => d.is_active !== false);
         setDepartments(active);
         if (active.length > 0 && !departmentId) {
-          setDepartmentId(active[0].id || String(active[0].dept_id));
+          setDepartmentId(String(active[0].dept_id));
         }
       });
       if (currentUser?.full_name && !conductedBy) {
@@ -60,10 +61,30 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
       return;
     }
 
+    if (departmentId === 'OTHER' && !customDeptName.trim()) {
+      showToast({ type: 'warning', title: 'Department Required', message: 'Please enter the custom department name.' });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
+      let finalDeptId: number;
+      let finalDeptName: string;
+
+      if (departmentId === 'OTHER') {
+        const otherDept = await DataService.getOrCreateOtherDepartment();
+        finalDeptId = Number(otherDept.dept_id);
+        finalDeptName = customDeptName.trim();
+      } else {
+        finalDeptId = Number(departmentId);
+        const selectedDept = departments.find(d => String(d.dept_id) === String(departmentId));
+        finalDeptName = selectedDept?.name || selectedDept?.dept_name || `Department ${finalDeptId}`;
+      }
+
       await DataService.createTrainingRecord({
-        department_id: departmentId,
+        dept_id: finalDeptId,
+        dept_name: finalDeptName,
+        department_id: finalDeptId,
         area: area.trim(),
         training_topic: trainingTopic.trim(),
         description: description.trim(),
@@ -79,6 +100,7 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
       setArea('');
       setTrainingTopic('');
       setDescription('');
+      setCustomDeptName('');
       setGroupPhotos([]);
       setAttendancePhotos([]);
       onCreated();
@@ -106,15 +128,49 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
             <select
               className="form-select"
               value={departmentId}
-              onChange={(e) => setDepartmentId(e.target.value)}
+              onChange={(e) => {
+                const val = e.target.value;
+                setDepartmentId(val);
+                if (val === 'OTHER') {
+                  const otherDept = departments.find(d => 
+                    (d.name && d.name.trim().toUpperCase() === 'OTHER') || 
+                    (d.dept_name && d.dept_name.trim().toUpperCase() === 'OTHER')
+                  );
+                  if (otherDept && otherDept.name && otherDept.name.trim().toUpperCase() !== 'OTHER') {
+                    setCustomDeptName(otherDept.name);
+                  }
+                } else {
+                  setCustomDeptName('');
+                }
+              }}
               required
             >
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>
-                  {d.name} {d.code ? `(${d.code})` : ''}
-                </option>
-              ))}
+              {departments
+                .filter(d => (d.name || d.dept_name || '').trim().toUpperCase() !== 'OTHER')
+                .map((d) => (
+                  <option key={d.id || d.dept_id} value={String(d.dept_id)}>
+                    {d.name || d.dept_name}
+                  </option>
+                ))}
+              <option value="OTHER">+ Other (Enter Department Name)</option>
             </select>
+
+            {departmentId === 'OTHER' && (
+              <div style={{ marginTop: '8px' }}>
+                <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
+                  Department Name (Editable) <span className="required">*</span>
+                </label>
+                <input
+                  type="text"
+                  className="form-input"
+                  placeholder="Enter custom department name..."
+                  value={customDeptName}
+                  onChange={(e) => setCustomDeptName(e.target.value)}
+                  required
+                  autoFocus
+                />
+              </div>
+            )}
           </div>
 
           <div className="form-group">

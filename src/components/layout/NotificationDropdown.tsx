@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { Bell, CheckCheck, Clock, AlertTriangle, MessageSquare, UserCheck, ShieldCheck } from 'lucide-react';
+import React from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { Bell, CheckCheck, Clock, AlertTriangle, MessageSquare, UserCheck, ShieldCheck, X } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { DataService, subscribeToDataChanges } from '../../services/dataService';
 import { Notification } from '../../types/database';
@@ -108,65 +109,63 @@ export const NotificationDropdown: React.FC = () => {
       </button>
 
       {isOpen && (
-        <div
-          className="notification-dropdown-panel"
-          style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            marginTop: '8px',
-            width: '360px',
-            maxWidth: 'calc(100vw - 24px)',
-            maxHeight: '480px',
-            background: '#ffffff',
-            border: '1px solid var(--border-hover)',
-            borderRadius: '12px',
-            boxShadow: 'var(--shadow-lg)',
-            zIndex: 1500,
-            display: 'flex',
-            flexDirection: 'column',
-            overflow: 'hidden',
-          }}
-        >
+        <>
           <div
-            style={{
-              padding: '12px 16px',
-              borderBottom: '1px solid var(--border-subtle)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              background: '#f8fafc',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Notifications</span>
-              {unreadCount > 0 && (
-                <span
-                  style={{
-                    background: 'rgba(245, 158, 11, 0.2)',
-                    color: 'var(--brand-primary)',
-                    fontSize: '0.75rem',
-                    padding: '2px 8px',
-                    borderRadius: '999px',
-                    fontWeight: 600,
-                  }}
-                >
-                  {unreadCount} new
-                </span>
-              )}
-            </div>
+            className="notification-mobile-backdrop"
+            onClick={() => setIsOpen(false)}
+          />
 
-            {unreadCount > 0 && (
-              <button
-                onClick={handleMarkAllRead}
-                className="btn-ghost"
-                style={{ fontSize: '0.75rem', color: 'var(--brand-primary)', padding: '4px 6px' }}
-              >
-                <CheckCheck size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
-                Mark all read
-              </button>
-            )}
-          </div>
+          <div className="notification-dropdown-panel">
+            <div
+              style={{
+                padding: '12px 16px',
+                borderBottom: '1px solid var(--border-subtle)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: '#f8fafc',
+                flexShrink: 0,
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem' }}>Notifications</span>
+                {unreadCount > 0 && (
+                  <span
+                    style={{
+                      background: 'rgba(245, 158, 11, 0.2)',
+                      color: 'var(--brand-primary)',
+                      fontSize: '0.75rem',
+                      padding: '2px 8px',
+                      borderRadius: '999px',
+                      fontWeight: 600,
+                    }}
+                  >
+                    {unreadCount} new
+                  </span>
+                )}
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                {unreadCount > 0 && (
+                  <button
+                    onClick={handleMarkAllRead}
+                    className="btn-ghost"
+                    style={{ fontSize: '0.75rem', color: 'var(--brand-primary)', padding: '4px 6px' }}
+                  >
+                    <CheckCheck size={14} style={{ marginRight: '4px', verticalAlign: 'middle' }} />
+                    Mark all read
+                  </button>
+                )}
+                <button
+                  onClick={() => setIsOpen(false)}
+                  className="btn-ghost"
+                  style={{ padding: '4px', color: 'var(--text-muted)', display: 'flex', alignItems: 'center' }}
+                  aria-label="Close"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
 
           <div style={{ overflowY: 'auto', flex: 1 }}>
             {notifications.length === 0 ? (
@@ -246,6 +245,7 @@ export const NotificationDropdown: React.FC = () => {
             )}
           </div>
         </div>
+        </>
       )}
     </div>
   );

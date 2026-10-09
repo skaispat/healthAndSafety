@@ -132,7 +132,7 @@ export const DataService = {
               dept_name: displayName,
               id: String(d.dept_id),
               name: displayName,
-              code: d.code,
+              code: d.dept_code || d.code,
               is_active: d.is_active !== false,
               created_at: d.created_at,
               updated_at: d.updated_at
@@ -146,31 +146,92 @@ export const DataService = {
     return getStored<Department[]>(STORAGE_KEYS.DEPARTMENTS, []);
   },
 
-  async addDepartment(name: string, code: string): Promise<Department> {
+  async addDepartment(name: string, code?: string): Promise<Department> {
     const depts = await this.getDepartments();
-    const newDept: Department = {
-      dept_id: depts.length + 1,
-      id: String(depts.length + 1),
-      name,
-      code: code.toUpperCase(),
+    const cleanName = name.trim();
+    const baseCode = (code || cleanName.slice(0, 4)).replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'DEPT';
+    
+    // Ensure code is unique among existing depts
+    let cleanCode = baseCode;
+    let counter = 1;
+    while (depts.some(d => (d.code === cleanCode || (d as any).dept_code === cleanCode))) {
+      cleanCode = `${baseCode.slice(0, 3)}${counter++}`;
+    }
+
+    let newDeptId = Date.now();
+    const createdDepartment: Department = {
+      dept_id: newDeptId,
+      dept_name: cleanName,
+      id: String(newDeptId),
+      name: cleanName,
+      code: cleanCode,
       is_active: true,
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
+
     if (isSupabaseConfigured() && supabase) {
       try {
-        await supabase.from('departments').insert([{
-          name: newDept.name,
-          code: newDept.code,
+        // User's Supabase departments table columns: dept_name, dept_code, is_active
+        const { data, error } = await supabase.from('departments').insert([{
+          dept_name: cleanName,
+          dept_code: cleanCode,
           is_active: true
-        }]);
+        }]).select().single();
+
+        if (error) {
+          console.warn('Initial insert to departments failed, trying fallback schema:', error.message);
+          // Fallback variation: name, code
+          const fb1 = await supabase.from('departments').insert([{
+            name: cleanName,
+            code: cleanCode,
+            is_active: true
+          }]).select().single();
+
+          if (fb1.data && fb1.data.dept_id) {
+            newDeptId = Number(fb1.data.dept_id);
+            createdDepartment.dept_id = newDeptId;
+            createdDepartment.id = String(newDeptId);
+          }
+        } else if (data && data.dept_id) {
+          newDeptId = Number(data.dept_id);
+          createdDepartment.dept_id = newDeptId;
+          createdDepartment.id = String(newDeptId);
+        }
       } catch (err) {
         console.warn('Supabase add department error', err);
       }
     }
-    setStored(STORAGE_KEYS.DEPARTMENTS, [...depts, newDept]);
-    return newDept;
+
+    setStored(STORAGE_KEYS.DEPARTMENTS, [...depts, createdDepartment]);
+    return createdDepartment;
   },
+
+  async getOrCreateDepartment(name: string): Promise<Department> {
+    const trimmed = name.trim();
+    const depts = await this.getDepartments();
+    const existing = depts.find(d =>
+      (d.name && d.name.toLowerCase() === trimmed.toLowerCase()) ||
+      (d.dept_name && d.dept_name.toLowerCase() === trimmed.toLowerCase())
+    );
+    if (existing) {
+      return existing;
+    }
+    return this.addDepartment(trimmed);
+  },
+
+  async getOrCreateOtherDepartment(customName?: string): Promise<Department> {
+    const depts = await this.getDepartments();
+    const existingOther = depts.find(d => 
+      (d.name && d.name.trim().toUpperCase() === 'OTHER') || 
+      (d.dept_name && d.dept_name.trim().toUpperCase() === 'OTHER')
+    );
+    if (existingOther) {
+      return existingOther;
+    }
+    return this.addDepartment('OTHER', 'OTH');
+  },
+
 
   // -------------------------------------------------------------
   // USERS
@@ -1350,6 +1411,9 @@ export const DataService = {
       const matchedDept = depts.find(d => d.dept_id === deptIdNum || d.id === String(deptIdNum));
       const conductedByIdNum = Number(t.conducted_by || t.created_by);
       const matchedTrainer = users.find(u => u.emp_id === conductedByIdNum || u.id === String(conductedByIdNum));
+      const deptDisplayName = (t.dept_name && t.dept_name.trim())
+        ? t.dept_name.trim()
+        : (matchedDept?.name || matchedDept?.dept_name || `Department ${deptIdNum}`);
 
       // Parse training_photos and attendance_photos JSONB columns
       const rawGroup = (Array.isArray(t.training_photos) ? t.training_photos : (t.group_photos || []));
@@ -1380,8 +1444,9 @@ export const DataService = {
         id: t.id,
         training_number: trainingNum,
         created_by: conductedByIdNum,
+        dept_name: deptDisplayName,
         dept_id: deptIdNum,
-        department_id: String(deptIdNum),
+        department_id: String(deptIdNum || ''),
         area: t.area || 'Plant Area',
         training_topic: t.training_topic,
         description: t.description || '',
@@ -1391,7 +1456,12 @@ export const DataService = {
         status: 'COMPLETED',
         created_at: t.created_at,
         updated_at: t.updated_at || t.created_at,
-        department: matchedDept,
+        department: {
+          dept_id: deptIdNum,
+          name: deptDisplayName,
+          dept_name: deptDisplayName,
+          id: String(deptIdNum || '0'),
+        },
         creator: matchedTrainer,
         photos: allPhotos,
         group_photos: groupPhotos,
@@ -1401,7 +1471,9 @@ export const DataService = {
   },
 
   async createTrainingRecord(params: {
-    department_id: string | number;
+    dept_id?: number | string;
+    department_id?: number | string;
+    dept_name?: string;
     area: string;
     training_topic: string;
     description: string;
@@ -1417,12 +1489,34 @@ export const DataService = {
     const now = new Date().toISOString();
     const trainingId = crypto.randomUUID();
     const trainingNumber = `TRN-${new Date().getFullYear()}-${String(existing.length + 1).padStart(3, '0')}`;
-    const deptIdNum = Number(params.department_id);
-    const officerIdNum = Number(params.officer_id);
-
+    
     const depts = await this.getDepartments();
     const users = await this.getUsers();
-    const matchedDept = depts.find(d => d.dept_id === deptIdNum || d.id === String(deptIdNum));
+
+    const rawDeptId = params.dept_id ?? params.department_id;
+    let finalDeptId = Number(rawDeptId);
+    let matchedDept = depts.find(d => d.dept_id === finalDeptId || d.id === String(finalDeptId));
+    
+    // If not found by numeric ID, check by name
+    if (!matchedDept && typeof rawDeptId === 'string') {
+      matchedDept = depts.find(d => 
+        (d.name && d.name.toLowerCase() === rawDeptId.trim().toLowerCase()) ||
+        (d.dept_name && d.dept_name.toLowerCase() === rawDeptId.trim().toLowerCase())
+      );
+      if (matchedDept) {
+        finalDeptId = Number(matchedDept.dept_id);
+      }
+    }
+
+    // If still invalid dept_id, fallback to OTHER department
+    if (isNaN(finalDeptId) || finalDeptId <= 0) {
+      const otherDept = await this.getOrCreateOtherDepartment();
+      finalDeptId = Number(otherDept.dept_id);
+      matchedDept = otherDept;
+    }
+
+    const finalDeptName = (params.dept_name || matchedDept?.name || matchedDept?.dept_name || `Department ${finalDeptId}`).trim();
+    const officerIdNum = Number(params.officer_id);
     const trainerUser = users.find(u => u.emp_id === officerIdNum || u.id === String(officerIdNum));
 
     // Prepare group photos and attendance photos
@@ -1457,8 +1551,9 @@ export const DataService = {
       id: trainingId,
       training_number: trainingNumber,
       created_by: officerIdNum,
-      dept_id: deptIdNum,
-      department_id: String(deptIdNum),
+      dept_name: finalDeptName,
+      dept_id: finalDeptId,
+      department_id: String(finalDeptId),
       area: params.area.trim(),
       training_topic: params.training_topic.trim(),
       description: params.description.trim(),
@@ -1468,19 +1563,25 @@ export const DataService = {
       status: 'COMPLETED',
       created_at: now,
       updated_at: now,
-      department: matchedDept,
+      department: matchedDept || {
+        dept_id: finalDeptId,
+        name: finalDeptName,
+        dept_name: finalDeptName,
+        id: String(finalDeptId),
+      },
       creator: trainerUser,
       photos: allPhotoItems,
       group_photos: groupPhotoItems,
       attendance_photos: attendancePhotoItems,
     };
 
-    // 1. Single Table insert to public.trainings
+    // 1. Single Table insert to public.trainings (using both dept_id and dept_name)
     if (isSupabaseConfigured() && supabase) {
       try {
         const { error: insertError } = await supabase.from('trainings').insert([{
           id: trainingId,
-          dept_id: deptIdNum,
+          dept_id: finalDeptId,
+          dept_name: finalDeptName,
           area: newRecord.area,
           training_topic: newRecord.training_topic,
           description: newRecord.description,

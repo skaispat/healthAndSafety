@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TaskHistory } from '../../types/database';
 import { Activity, Clock, ShieldCheck, RotateCcw, AlertTriangle, Send, UserPlus } from 'lucide-react';
 
@@ -8,6 +8,8 @@ interface ActivityFeedProps {
 }
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, onSelectTask }) => {
+  const [showAll, setShowAll] = useState(false);
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'TASK_CREATED':
@@ -27,6 +29,8 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, onSelect
     }
   };
 
+  const displayedList = showAll ? activities : activities.slice(0, 5);
+
   return (
     <div className="ehs-card" style={{ display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', flexShrink: 0 }}>
@@ -45,9 +49,9 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, onSelect
           display: 'flex',
           flexDirection: 'column',
           gap: '10px',
-          maxHeight: '380px',
-          overflowY: 'auto',
-          paddingRight: '6px',
+          maxHeight: showAll ? '440px' : 'none',
+          overflowY: showAll ? 'auto' : 'visible',
+          paddingRight: showAll ? '6px' : '0',
         }}
       >
         {activities.length === 0 ? (
@@ -55,7 +59,7 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, onSelect
             No recent activity recorded.
           </div>
         ) : (
-          activities.map((act) => (
+          displayedList.map((act) => (
             <div
               key={act.id}
               onClick={() => onSelectTask(act.task_id)}
@@ -104,6 +108,29 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ activities, onSelect
           ))
         )}
       </div>
+
+      {activities.length > 5 && (
+        <button
+          type="button"
+          onClick={() => setShowAll(!showAll)}
+          className="btn-ghost"
+          style={{
+            marginTop: '12px',
+            padding: '7px 12px',
+            fontSize: '0.78rem',
+            fontWeight: 700,
+            color: 'var(--brand-primary)',
+            width: '100%',
+            textAlign: 'center',
+            borderRadius: '6px',
+            background: 'var(--bg-surface-elevated)',
+            border: '1px solid var(--border-subtle)',
+            cursor: 'pointer',
+          }}
+        >
+          {showAll ? 'Show Fewer Logs' : `View All ${activities.length} Logs`}
+        </button>
+      )}
     </div>
   );
 };

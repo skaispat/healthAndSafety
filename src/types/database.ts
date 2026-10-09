@@ -264,7 +264,8 @@ export interface TrainingRecord {
   training_number: string;
   created_by: number | string;
   department_id: string;
-  dept_id?: number;
+  dept_id?: number | string;
+  dept_name?: string;
   area: string;
   training_topic: string;
   description: string;

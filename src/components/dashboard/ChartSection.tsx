@@ -44,26 +44,33 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
     { name: 'Low (1% – 3%)', value: observations.filter((o) => o.priority === 'LOW').length, color: '#10b981' },
   ];
 
-  // 3. Department Breakdown
-  const departmentData = departments.map((dept) => {
-    const deptObs = observations.filter((o) => o.department_id === dept.id).length;
-    const deptTasks = tasks.filter((t) => t.observation?.department_id === dept.id).length;
-    return {
-      name: dept.name,
-      Observations: deptObs,
-      Tasks: deptTasks,
-    };
-  });
+  // 3. Department Breakdown (Filter to departments with activity so bars are clean and readable)
+  const activeDepartments = departments
+    .map((dept) => {
+      const deptObs = observations.filter((o) => o.department_id === dept.id).length;
+      const deptTasks = tasks.filter((t) => t.observation?.department_id === dept.id).length;
+      return {
+        name: dept.name,
+        shortName: dept.code || (dept.name.length > 10 ? dept.name.slice(0, 8) + '…' : dept.name),
+        fullName: dept.name,
+        Observations: deptObs,
+        Tasks: deptTasks,
+        total: deptObs + deptTasks,
+      };
+    })
+    .filter((d) => d.total > 0)
+    .sort((a, b) => b.total - a.total);
 
-  // 4. Monthly Safety Trend (Dynamic Mock for visual trend)
-  const monthlyTrendData = [
-    { month: 'Apr', Observations: 14, Completed: 12, Overdue: 1 },
-    { month: 'May', Observations: 19, Completed: 17, Overdue: 2 },
-    { month: 'Jun', Observations: 22, Completed: 20, Overdue: 1 },
-    { month: 'Jul', Observations: 18, Completed: 16, Overdue: 3 },
-    { month: 'Aug', Observations: 25, Completed: 21, Overdue: 2 },
-    { month: 'Sep', Observations: observations.length + 15, Completed: tasks.filter(t => t.status === 'COMPLETED').length + 12, Overdue: tasks.filter(t => t.status === 'OVERDUE').length },
-  ];
+  const departmentData = activeDepartments.length > 0
+    ? activeDepartments
+    : departments.slice(0, 4).map((dept) => ({
+        name: dept.name,
+        shortName: dept.code || dept.name.slice(0, 8),
+        fullName: dept.name,
+        Observations: 0,
+        Tasks: 0,
+        total: 0,
+      }));
 
   const customTooltipStyle = {
     backgroundColor: '#ffffff',
@@ -76,31 +83,33 @@ export const ChartSection: React.FC<ChartSectionProps> = ({
 
   return (
     <div className="grid-charts">
-
-
-
-
       {/* Chart 1: Department Breakdown */}
       <div className="ehs-card">
-        <h4 style={{ fontSize: '0.95rem', fontWeight: 700, marginBottom: '16px', color: 'var(--text-primary)' }}>
-          Department Safety Volume
-        </h4>
-        <div style={{ height: '260px', width: '100%' }}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px' }}>
+          <h4 style={{ fontSize: '0.95rem', fontWeight: 700, margin: 0, color: 'var(--text-primary)' }}>
+            Department Safety Volume
+          </h4>
+          <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+            {departmentData.length} Active Plant Depts
+          </span>
+        </div>
+        <div style={{ height: '230px', width: '100%' }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={departmentData} margin={{ top: 10, right: 10, left: -20, bottom: 20 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" stroke="#64748b" fontSize={11} interval={0} angle={-20} textAnchor="end" />
-              <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} />
-              <Tooltip contentStyle={customTooltipStyle} />
-              <Legend verticalAlign="top" height={32} />
-              <Bar dataKey="Observations" fill="#b91c1c" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="Tasks" fill="#0284c7" radius={[4, 4, 0, 0]} />
+            <BarChart data={departmentData} margin={{ top: 10, right: 10, left: -20, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+              <XAxis dataKey="shortName" stroke="#64748b" fontSize={11} interval={0} tickLine={false} />
+              <YAxis stroke="#64748b" fontSize={11} allowDecimals={false} tickLine={false} />
+              <Tooltip
+                contentStyle={customTooltipStyle}
+                formatter={(val: any, name: any, item: any) => [val, `${item?.payload?.fullName || ''} (${name})`]}
+              />
+              <Legend verticalAlign="top" height={30} iconSize={10} />
+              <Bar dataKey="Observations" fill="#b91c1c" radius={[4, 4, 0, 0]} maxBarSize={36} />
+              <Bar dataKey="Tasks" fill="#0284c7" radius={[4, 4, 0, 0]} maxBarSize={36} />
             </BarChart>
           </ResponsiveContainer>
         </div>
       </div>
-
-
     </div>
   );
 };

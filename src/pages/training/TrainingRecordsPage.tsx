@@ -112,7 +112,12 @@ export const TrainingRecordsPage: React.FC = () => {
       (t.area || '').toLowerCase().includes(query) ||
       (t.conducted_by || '').toLowerCase().includes(query);
 
-    const matchesDept = deptFilter === 'ALL' || t.department_id === deptFilter || String(t.dept_id) === deptFilter;
+    const matchesDept =
+      deptFilter === 'ALL' ||
+      t.department_id === deptFilter ||
+      String(t.dept_id) === deptFilter ||
+      (t.department?.name && t.department.name.toLowerCase() === deptFilter.toLowerCase()) ||
+      (t.department?.dept_id && String(t.department.dept_id) === deptFilter);
     return matchesSearch && matchesDept;
   });
 
@@ -182,11 +187,13 @@ export const TrainingRecordsPage: React.FC = () => {
             style={{ height: '36px', fontSize: '0.85rem' }}
           >
             <option value="ALL">All Departments</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name} {d.code ? `(${d.code})` : ''}
-              </option>
-            ))}
+            {departments
+              .filter(d => (d.name || d.dept_name || '').trim().toUpperCase() !== 'OTHER')
+              .map((d) => (
+                <option key={d.id || d.dept_id} value={d.name}>
+                  {d.name}
+                </option>
+              ))}
           </select>
         </div>
 
