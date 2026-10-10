@@ -109,6 +109,7 @@ export const TrainingRecordsPage: React.FC = () => {
       (t.training_topic || '').toLowerCase().includes(query) ||
       (t.training_number || '').toLowerCase().includes(query) ||
       (t.department?.name || '').toLowerCase().includes(query) ||
+      (t.dept_name || '').toLowerCase().includes(query) ||
       (t.area || '').toLowerCase().includes(query) ||
       (t.conducted_by || '').toLowerCase().includes(query);
 
@@ -117,6 +118,7 @@ export const TrainingRecordsPage: React.FC = () => {
       t.department_id === deptFilter ||
       String(t.dept_id) === deptFilter ||
       (t.department?.name && t.department.name.toLowerCase() === deptFilter.toLowerCase()) ||
+      (t.dept_name && t.dept_name.toLowerCase() === deptFilter.toLowerCase()) ||
       (t.department?.dept_id && String(t.department.dept_id) === deptFilter);
     return matchesSearch && matchesDept;
   });

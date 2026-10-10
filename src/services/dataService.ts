@@ -1411,9 +1411,19 @@ export const DataService = {
       const matchedDept = depts.find(d => d.dept_id === deptIdNum || d.id === String(deptIdNum));
       const conductedByIdNum = Number(t.conducted_by || t.created_by);
       const matchedTrainer = users.find(u => u.emp_id === conductedByIdNum || u.id === String(conductedByIdNum));
-      const deptDisplayName = (t.dept_name && t.dept_name.trim())
+      const isOther = (matchedDept?.name && matchedDept.name.trim().toUpperCase() === 'OTHER') ||
+                      (matchedDept?.dept_name && matchedDept.dept_name.trim().toUpperCase() === 'OTHER') ||
+                      deptIdNum === 14;
+
+      let deptDisplayName = (t.dept_name && t.dept_name.trim())
         ? t.dept_name.trim()
         : (matchedDept?.name || matchedDept?.dept_name || `Department ${deptIdNum}`);
+
+      if (isOther && deptDisplayName) {
+        if (deptDisplayName.toUpperCase() !== 'OTHER' && !/^other\s*\(/i.test(deptDisplayName)) {
+          deptDisplayName = `Other (${deptDisplayName})`;
+        }
+      }
 
       // Parse training_photos and attendance_photos JSONB columns
       const rawGroup = (Array.isArray(t.training_photos) ? t.training_photos : (t.group_photos || []));
@@ -1515,7 +1525,17 @@ export const DataService = {
       matchedDept = otherDept;
     }
 
-    const finalDeptName = (params.dept_name || matchedDept?.name || matchedDept?.dept_name || `Department ${finalDeptId}`).trim();
+    let finalDeptName = (params.dept_name || matchedDept?.name || matchedDept?.dept_name || `Department ${finalDeptId}`).trim();
+
+    const isOther = (matchedDept?.name && matchedDept.name.trim().toUpperCase() === 'OTHER') ||
+                    (matchedDept?.dept_name && matchedDept.dept_name.trim().toUpperCase() === 'OTHER') ||
+                    finalDeptId === 14;
+
+    if (isOther && finalDeptName) {
+      if (finalDeptName.toUpperCase() !== 'OTHER' && !/^other\s*\(/i.test(finalDeptName)) {
+        finalDeptName = `Other (${finalDeptName})`;
+      }
+    }
     const officerIdNum = Number(params.officer_id);
     const trainerUser = users.find(u => u.emp_id === officerIdNum || u.id === String(officerIdNum));
 

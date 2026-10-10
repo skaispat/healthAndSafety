@@ -82,7 +82,10 @@ export const AddTrainingPage: React.FC = () => {
       if (departmentId === 'OTHER') {
         const otherDept = await DataService.getOrCreateOtherDepartment();
         finalDeptId = Number(otherDept.dept_id);
-        finalDeptName = customDeptName.trim();
+        const trimmedCustom = customDeptName.trim();
+        finalDeptName = /^other\s*\(/i.test(trimmedCustom) 
+          ? trimmedCustom 
+          : `Other (${trimmedCustom})`;
       } else {
         finalDeptId = Number(departmentId);
         const selectedDept = departments.find(d => String(d.dept_id) === String(departmentId));
@@ -160,7 +163,8 @@ export const AddTrainingPage: React.FC = () => {
                       (d.dept_name && d.dept_name.trim().toUpperCase() === 'OTHER')
                     );
                     if (otherDept && otherDept.name && otherDept.name.trim().toUpperCase() !== 'OTHER') {
-                      setCustomDeptName(otherDept.name);
+                      const match = otherDept.name.match(/^other\s*\((.*?)\)$/i);
+                      setCustomDeptName(match ? match[1] : otherDept.name);
                     }
                   } else {
                     setCustomDeptName('');
@@ -181,17 +185,22 @@ export const AddTrainingPage: React.FC = () => {
               {departmentId === 'OTHER' && (
                 <div style={{ marginTop: '8px' }}>
                   <label style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '4px', display: 'block' }}>
-                    Department Name (Editable) <span className="required">*</span>
+                    Department Name (e.g. Contractor) <span className="required">*</span>
                   </label>
                   <input
                     type="text"
                     className="form-input"
-                    placeholder="Enter custom department name..."
+                    placeholder="Enter custom department (e.g. Contractor)..."
                     value={customDeptName}
                     onChange={(e) => setCustomDeptName(e.target.value)}
                     required
                     autoFocus
                   />
+                  {customDeptName.trim() && (
+                    <div style={{ marginTop: '6px', fontSize: '0.78rem', color: 'var(--text-secondary)', background: 'var(--surface-color-subtle, #f8fafc)', padding: '5px 10px', borderRadius: '4px', border: '1px solid var(--border-color)' }}>
+                      Preview in app & PDF: <strong style={{ color: 'var(--primary-color, #2563eb)' }}>{/^other\s*\(/i.test(customDeptName.trim()) ? customDeptName.trim() : `Other (${customDeptName.trim()})`}</strong>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

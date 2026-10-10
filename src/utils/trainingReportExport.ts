@@ -21,7 +21,20 @@ const urlToBase64 = async (url: string): Promise<string> => {
 };
 
 export const exportTrainingReportPDF = async (training: TrainingRecord): Promise<void> => {
-  const deptName = training.department?.name || 'Department';
+  const rawDept = (training.dept_name || training.department?.name || 'Department').trim();
+  const isOther = (training.department?.name && training.department.name.trim().toUpperCase() === 'OTHER') ||
+                  (training.department?.dept_name && training.department.dept_name.trim().toUpperCase() === 'OTHER') ||
+                  String(training.dept_id) === '14';
+
+  let deptName = rawDept;
+  if (isOther && rawDept) {
+    if (rawDept.toUpperCase() !== 'OTHER' && !/^other\s*\(/i.test(rawDept)) {
+      deptName = `Other (${rawDept})`;
+    }
+  } else if (!deptName) {
+    deptName = training.department?.name || 'Department';
+  }
+
   const areaName = training.area || 'Plant Area';
   const cleanDept = deptName.replace(/[\\/:*?"<>|]/g, '').trim();
   const cleanArea = areaName.replace(/[\\/:*?"<>|]/g, '').trim();
