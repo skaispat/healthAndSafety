@@ -102,7 +102,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
               {/* 2. All Observations & Tasks */}
               <NavLink to="/observations" className={navLinkClass} onClick={onClose}>
                 <Eye size={18} />
-                <span>All Observations & Tasks</span>
+                <span>Observations & Tasks</span>
               </NavLink>
 
               {/* 3. My Task */}
