@@ -18,6 +18,8 @@ interface ExportTaskReportParams {
   beforePhotos: { url?: string; photo_url?: string; file_name?: string }[];
   afterPhotos: { url?: string; photo_url?: string; file_name?: string }[];
   correctiveActions?: any[];
+  approvalRemarks?: string | null;
+  approverName?: string | null;
 }
 
 const urlToBase64 = async (url: string): Promise<string> => {
@@ -52,6 +54,8 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
     beforePhotos,
     afterPhotos,
     correctiveActions,
+    approvalRemarks,
+    approverName,
   } = params;
 
   const cleanDept = (deptName || 'Department').replace(/[\\/:*?"<>|]/g, '').trim();
@@ -60,6 +64,22 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
   const reportDocTitle = cleanArea ? `${cleanDept} - ${cleanArea} - ${dateOnly}` : `${cleanDept} - ${dateOnly}`;
 
   const nowIST = formatISTDateTime(new Date().toISOString());
+
+  // Determine final approval remarks from parameter or task/action records
+  const finalApprovalRemarks = approvalRemarks ||
+    task.approval_remarks ||
+    (correctiveActions && correctiveActions.length > 0
+      ? correctiveActions[correctiveActions.length - 1].approver_remarks
+      : null) ||
+    task.observation?.solution_text ||
+    null;
+
+  const resolvedApproverName = approverName ||
+    task.completer?.full_name ||
+    (correctiveActions && correctiveActions.length > 0
+      ? correctiveActions[correctiveActions.length - 1].approver?.full_name
+      : null) ||
+    'Safety Officer';
 
   // Pre-convert all images to base64 so html2canvas renders immediately with zero network/CORS lag
   const resolvedBeforePhotos = await Promise.all(
@@ -119,54 +139,59 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
   const reportBodyHtml = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; color: #0f172a; background: #ffffff; padding: 20px; line-height: 1.4; width: 780px; box-sizing: border-box;">
       <!-- Header Bar -->
-      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #b91c1c; padding-bottom: 12px; margin-bottom: 14px;">
+      <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 3px solid #b91c1c; padding-bottom: 10px; margin-bottom: 12px;">
         <div>
-          <div style="font-size: 18px; font-weight: 800; color: #b91c1c; letter-spacing: -0.02em;">SK AISPAT — INDUSTRIAL HEALTH & SAFETY</div>
+          <div style="font-size: 18px; font-weight: 800; color: #b91c1c; letter-spacing: -0.02em;">SKA ISPAT HEALTH & SAFETY</div>
           <div style="font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700; letter-spacing: 0.05em; margin-top: 2px;">
-            Hazard Observation & Corrective Completion Report
+            Hazard Observation & Completion Report
           </div>
         </div>
         <div style="text-align: right;">
           <div style="font-size: 14px; font-weight: 800; color: #0f172a; font-family: monospace;">${task.task_number}</div>
-          <span style="display: inline-block; font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; background: #10b981; color: #fff; margin-top: 4px;">
-            ${task.status === 'COMPLETED' ? 'STATUS: COMPLETED & VERIFIED' : `STATUS: ${task.status.replace(/_/g, ' ')}`}
-          </span>
+          <div style="margin-top: 3px;">
+            <span style="display: inline-block; font-size: 9px; font-weight: 800; padding: 3px 8px; border-radius: 4px; text-transform: uppercase; background: #10b981; color: #fff;">
+              ${task.status === 'COMPLETED' ? 'STATUS: COMPLETED & VERIFIED' : `STATUS: ${task.status.replace(/_/g, ' ')}`}
+            </span>
+          </div>
+          <div style="font-size: 9px; color: #64748b; font-weight: 600; margin-top: 3px;">
+            Report Generated: ${nowIST}
+          </div>
         </div>
       </div>
 
-      <!-- Metadata Grid -->
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 12px; margin-bottom: 14px;">
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Department & Area</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${deptName || 'N/A'}${areaName ? ` • ${areaName}` : ''}</span>
+      <!-- Metadata Grid (Segregated Department & Area, Clean Vertical Orientation) -->
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px 14px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 10px 14px; margin-bottom: 14px;">
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Department</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${deptName || 'N/A'}</span>
         </div>
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Assigned To</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${assigneeName || 'Employee'}</span>
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Plant Area</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${areaName || 'Site / General'}</span>
         </div>
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Created By</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${assignerName || 'Safety Officer'}</span>
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Assigned To</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${assigneeName || 'Employee'}</span>
         </div>
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Priority</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${priority || 'NORMAL'}</span>
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Created By</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${assignerName || 'Safety Officer'}</span>
         </div>
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Target Due Date</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${dueDate ? formatISTDate(dueDate) : '—'}</span>
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Priority</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: ${priority === 'HIGH' ? '#dc2626' : priority === 'LOW' ? '#16a34a' : '#d97706'}; margin-top: 2px;">${priority || 'MEDIUM'}</span>
         </div>
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Logged Date</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${formatISTDate(task.created_at)}</span>
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Target Due Date</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${dueDate ? formatISTDate(dueDate) : '—'}</span>
         </div>
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Completion Date</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${completedDate ? formatISTDate(completedDate) : '—'}</span>
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Logged Date</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${formatISTDate(task.created_at)}</span>
         </div>
-        <div style="display: flex; flexDirection: column;">
-          <span style="font-size: 9px; text-transform: uppercase; font-weight: 700; color: #64748b;">Report Generated</span>
-          <span style="font-size: 12px; font-weight: 600; color: #0f172a; margin-top: 2px;">${nowIST}</span>
+        <div style="display: flex; flex-direction: column; justify-content: flex-start;">
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Completion Date</span>
+          <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${completedDate ? formatISTDate(completedDate) : '—'}</span>
         </div>
       </div>
 
@@ -206,6 +231,7 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
       resolvedCorrectiveActions.map((ca: any, idx: number) => {
         const isLatest = idx === resolvedCorrectiveActions.length - 1;
         const attemptPhotos = (ca.photos && ca.photos.length > 0) ? ca.photos : [];
+        const currentAttemptApprovalRemarks = ca.approver_remarks || (isLatest ? finalApprovalRemarks : null);
         return `
                   <div style="background: ${isLatest ? '#f0fdf4' : '#f8fafc'}; border: 1px solid ${isLatest ? '#86efac' : '#e2e8f0'}; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
@@ -233,6 +259,21 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
                         </div>
                       </div>
                     ` : ''}
+
+                    ${currentAttemptApprovalRemarks ? `
+                      <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 4px; padding: 6px 8px; margin-top: 6px;">
+                        <div style="display: flex; justify-content: space-between; align-items: center;">
+                          <div style="font-size: 9px; font-weight: 700; color: #047857; text-transform: uppercase;">
+                            Safety Officer Verification Remarks:
+                          </div>
+                          ${ca.approved_at ? `<span style="font-size: 8.5px; color: #065f46;">${formatISTDateTime(ca.approved_at)}</span>` : ''}
+                        </div>
+                        <div style="font-size: 11px; color: #065f46; font-weight: 600; margin-top: 2px; line-height: 1.35;">
+                          "${currentAttemptApprovalRemarks}"
+                        </div>
+                        ${ca.approver?.full_name ? `<div style="font-size: 9px; color: #047857; margin-top: 3px;">Verified by: <strong>${ca.approver.full_name}</strong></div>` : ''}
+                      </div>
+                    ` : ''}
                   </div>
                 `;
       }).join('')
@@ -244,16 +285,30 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
 
               <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Evidence Photos (${resolvedAfterPhotos.length})</div>
               ${renderPhotoHtml(resolvedAfterPhotos, 'After', '#10b981')}
+
+              ${finalApprovalRemarks ? `
+                <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 8px 10px; margin-top: 8px;">
+                  <div style="font-size: 9px; font-weight: 700; color: #047857; text-transform: uppercase;">
+                    Safety Officer Verification Remarks:
+                  </div>
+                  <div style="font-size: 11px; color: #065f46; font-weight: 600; margin-top: 2px;">
+                    "${finalApprovalRemarks}"
+                  </div>
+                </div>
+              ` : ''}
             `}
           </div>
         </div>
       </div>
 
       <!-- Footer & Signoff -->
-      <div style="border-top: 1px solid #e2e8f0; padding-top: 8px; display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #64748b; margin-top: 8px;">
-       
+      <div style="border-top: 1px solid #e2e8f0; padding-top: 10px; margin-top: 10px; display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #475569;">
         <div>
-          Safety Officer Verification: <strong style="color: #15803d;">APPROVED</strong>
+          <span>Report Generated: <strong>${nowIST}</strong></span>
+        </div>
+        <div style="text-align: right;">
+          <span>Safety Officer Verification: <strong style="color: #15803d; text-transform: uppercase;">APPROVED & VERIFIED</strong></span>
+          ${resolvedApproverName ? `<span style="margin-left: 8px; color: #64748b;">(Verified by: <strong>${resolvedApproverName}</strong>)</span>` : ''}
         </div>
       </div>
     </div>

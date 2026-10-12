@@ -6,7 +6,7 @@ import { PhotoGallery } from '../../components/common/PhotoGallery';
 import { CreateObservationModal } from '../../components/observations/CreateObservationModal';
 import { TaskDetailModal } from '../../components/tasks/TaskDetailModal';
 import { Modal } from '../../components/common/Modal';
-import { Search, PlusCircle, Eye, Building2, MapPin, Clock, Calendar, User, AlertCircle, Wrench, ShieldCheck } from 'lucide-react';
+import { Search, PlusCircle, Eye, Building2, MapPin, Clock, Calendar, User, AlertCircle, Wrench, ShieldCheck, Loader2 } from 'lucide-react';
 import { useSearchParams } from 'react-router-dom';
 import { formatISTDateTime, formatISTDate } from '../../utils/dateUtils';
 
@@ -14,7 +14,7 @@ export const AllObservationsPage: React.FC = () => {
   const [searchParams, setSearchParams] = useSearchParams();
   const [observations, setObservations] = useState<Observation[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -311,44 +311,68 @@ export const AllObservationsPage: React.FC = () => {
       </div>
 
 
-      {/* Observations Desktop Table */}
-      <div className="table-container table-desktop-view">
-        <table className="ehs-table">
-          <thead>
-            <tr>
-              <th style={{ width: '70px' }}>Sr No</th>
-              <th>Department & Area</th>
-              <th>Safety Observation</th>
-              <th>Priority & Risk</th>
-              <th>Assignee</th>
-              <th>Due Date</th>
-              <th>Status</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredObservations.length === 0 ? (
-              <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
-                  No observations found matching current filters.
-                </td>
-              </tr>
-            ) : (
-              filteredObservations.map((obs, index) => {
-                const isReviewNeeded = obs.status === 'SUBMITTED_FOR_REVIEW';
-
-                return (
-                  <tr
-                    key={obs.id}
-                    onClick={() => openObsDetails(obs)}
-                    style={{
-                      cursor: 'pointer',
-                      background: isReviewNeeded ? 'rgba(245, 158, 11, 0.05)' : undefined,
-                    }}
-                  >
-                    <td style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>
-                      {index + 1}
+      {/* Observations Desktop Table & Mobile Cards */}
+      {loading ? (
+        <div
+          className="ehs-card"
+          style={{
+            padding: '50px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+          }}
+        >
+          <Loader2 size={32} style={{ color: 'var(--brand-primary)', animation: 'spin 1s linear infinite' }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-primary)' }}>Loading Observations...</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Fetching safety logs and plant hazard records</div>
+          </div>
+        </div>
+      ) : (
+        <>
+          <div className="table-container table-desktop-view">
+            <table className="ehs-table">
+              <thead>
+                <tr>
+                  <th style={{ minWidth: '150px' }}>Sr No</th>
+                  <th>Department & Area</th>
+                  <th>Safety Observation</th>
+                  <th>Priority & Risk</th>
+                  <th>Assignee</th>
+                  <th>Due Date</th>
+                  <th>Status</th>
+                  <th>Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredObservations.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '40px', color: 'var(--text-muted)' }}>
+                      No observations found matching current filters.
                     </td>
+                  </tr>
+                ) : (
+                  filteredObservations.map((obs, index) => {
+                    const isReviewNeeded = obs.status === 'SUBMITTED_FOR_REVIEW';
+
+                    return (
+                      <tr
+                        key={obs.id}
+                        onClick={() => openObsDetails(obs)}
+                        style={{
+                          cursor: 'pointer',
+                          background: isReviewNeeded ? 'rgba(245, 158, 11, 0.05)' : undefined,
+                        }}
+                      >
+                        <td style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span>{obs.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}</span>
+                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>#{index + 1}</span>
+                          </div>
+                        </td>
                     <td>
                       <div style={{ fontWeight: 600 }}>{obs.department?.name || 'N/A'}</div>
                       <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{obs.area}</div>
@@ -446,8 +470,8 @@ export const AllObservationsPage: React.FC = () => {
               >
                 <div className="mobile-card-row">
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.9rem' }}>
-                      #{index + 1}
+                    <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.88rem' }}>
+                      #{index + 1} • {obs.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}
                     </span>
                     <PriorityBadge priority={obs.priority} />
                   </div>
@@ -532,6 +556,8 @@ export const AllObservationsPage: React.FC = () => {
           })
         )}
       </div>
+      </>
+      )}
 
       {/* Task Detail & Admin Review Modal */}
       <TaskDetailModal
@@ -658,4 +684,5 @@ export const AllObservationsPage: React.FC = () => {
     </div>
   );
 };
+
 

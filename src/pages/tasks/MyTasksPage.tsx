@@ -5,6 +5,7 @@ import { DataService, subscribeToDataChanges } from '../../services/dataService'
 import { PriorityBadge, StatusBadge } from '../../components/common/Badge';
 import { TaskDetailModal } from '../../components/tasks/TaskDetailModal';
 import { CreateOfficerTaskModal } from '../../components/tasks/CreateOfficerTaskModal';
+import { ImagePreviewModal } from '../../components/common/ImagePreviewModal';
 import { useSearchParams } from 'react-router-dom';
 import {
   CheckSquare,
@@ -16,12 +17,16 @@ import {
   PlusCircle,
   Eye,
   ShieldCheck,
+  Loader2,
 } from 'lucide-react';
 import { formatISTDate } from '../../utils/dateUtils';
 
 export const MyTasksPage: React.FC = () => {
   const { currentUser, isOfficer, isUser } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  // Loading state
+  const [loading, setLoading] = useState(true);
 
   // Tasks and counts
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -30,8 +35,17 @@ export const MyTasksPage: React.FC = () => {
   const [verificationCount, setVerificationCount] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
 
-  // Officer scope: 'MINE' (Assigned to Myself) | 'VERIFICATION' (Pending Verification) | 'ALL' (All Plant Tasks)
-  const [officerScope, setOfficerScope] = useState<'MINE' | 'VERIFICATION' | 'ALL'>('MINE');
+  // Image Preview Modal state
+  const [previewImage, setPreviewImage] = useState<{
+    url: string;
+    title: string;
+    badgeText?: string;
+    badgeBg?: string;
+    badgeColor?: string;
+  } | null>(null);
+
+  // Officer scope: 'MINE' (Assigned to Me / Done by Me) | 'ALL' (All Plant Tasks) | 'VERIFICATION' (Pending Verification)
+  const [officerScope, setOfficerScope] = useState<'MINE' | 'ALL' | 'VERIFICATION'>('MINE');
 
   // Modals & Selection
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -43,46 +57,150 @@ export const MyTasksPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const currentEmpId = Number(currentUser?.emp_id || currentUser?.id || 0);
-  const isUserRole = isUser;
+  const isSafetyOfficerOrAdmin = Boolean(
+    isOfficer ||
+    (currentUser?.position && currentUser.position.trim().toUpperCase() === 'HEALTH AND SAFETY') ||
+    (currentUser?.role && currentUser.role.toUpperCase() === 'HEALTH_SAFETY_OFFICER') ||
+    (currentUser?.role && currentUser.role.toLowerCase() === 'admin') ||
+    (currentUser?.username && currentUser.username.toLowerCase() === 'admin')
+  );
+  const isUserRole = !isSafetyOfficerOrAdmin;
+
+  const getTaskPhotosInfo = (task: Task) => {
+    const obs = task.observation;
+    const rawPool: any[] = [
+      ...(obs?.all_photos || []),
+      ...(task.all_photos || []),
+      ...(obs?.photos || []),
+      ...(task.initial_photos || []),
+      ...(task.photos || []),
+      ...((task as any).photos || []),
+    ];
+    const uniquePoolMap = new Map<string, any>();
+    rawPool.forEach((p: any) => {
+      const url = typeof p === 'string' ? p : (p.photo_url || p.url);
+      if (url && !uniquePoolMap.has(url)) {
+        uniquePoolMap.set(url, {
+          ...(typeof p === 'object' ? p : {}),
+          photo_url: url,
+          url: url,
+          file_name: (typeof p === 'object' ? (p.file_name || p.name) : '') || 'Photo',
+          photo_type: (typeof p === 'object' && p.photo_type) ? p.photo_type : 'INITIAL',
+        });
+      }
+    });
+    const allUniquePhotos = Array.from(uniquePoolMap.values());
+
+    const beforePhotos = allUniquePhotos.filter((p: any) => {
+      if (p.photo_type === 'INITIAL') return true;
+      if (p.photo_type === 'CORRECTIVE') return false;
+      return true;
+    });
+
+    const afterPhotosMap = new Map<string, any>();
+    (task.corrective_actions || (obs as any)?.corrective_actions || []).forEach((ca: any) => {
+      (ca.photos || []).forEach((p: any) => {
+        const url = typeof p === 'string' ? p : (p.photo_url || p.url);
+        if (url && !afterPhotosMap.has(url)) {
+          afterPhotosMap.set(url, {
+            photo_url: url,
+            url: url,
+            file_name: (typeof p === 'object' ? (p.file_name || p.name) : '') || 'Proof Photo',
+          });
+        }
+      });
+    });
+
+    allUniquePhotos.forEach((p: any) => {
+      const url = p.photo_url || p.url;
+      if (!url) return;
+      if (p.photo_type === 'CORRECTIVE') {
+        if (!afterPhotosMap.has(url)) {
+          afterPhotosMap.set(url, {
+            photo_url: url,
+            url: url,
+            file_name: p.file_name || 'Proof Photo',
+          });
+        }
+      }
+    });
+
+    const afterPhotos = Array.from(afterPhotosMap.values());
+
+    const beforeUrl = beforePhotos[0]?.photo_url || beforePhotos[0]?.url || null;
+    const afterUrl = afterPhotos[0]?.photo_url || afterPhotos[0]?.url || null;
+    const isCompleted = task.status === 'COMPLETED' || task.status === 'CLOSED';
+    const isPendingReview = task.status === 'SUBMITTED_FOR_REVIEW';
+
+    return {
+      beforeUrl,
+      afterUrl,
+      beforeCount: beforePhotos.length,
+      afterCount: afterPhotos.length,
+      isCompleted,
+      isPendingReview,
+    };
+  };
 
   const loadData = async () => {
     if (!currentUser) return;
+    setLoading(true);
 
-    const [all, depts] = await Promise.all([
-      DataService.getTasks(),
-      DataService.getDepartments(),
-    ]);
+    try {
+      const [all, depts] = await Promise.all([
+        DataService.getTasks(),
+        DataService.getDepartments(),
+      ]);
 
-    setDepartments(depts);
+      setDepartments(depts);
 
-    // Filter tasks strictly by assigned_to ID matching the logged-in user's emp_id
-    const userOnlyTasks = all.filter((t) => {
-      const assignedToNum = Number(t.assigned_to ?? t.observation?.assigned_to ?? t.assignee?.emp_id);
-      return assignedToNum === currentEmpId;
-    });
+      // Filter tasks strictly for current user:
+      // 1. Assigned to current user (including tasks self-assigned by safety officer)
+      // 2. Done by current user (completed_by or submitted corrective action)
+      // 3. Or participant
+      const userOnlyTasks = all.filter((t) => {
+        const assignedToRaw = t.assigned_to ?? t.observation?.assigned_to ?? t.assignee?.emp_id;
+        const assignedToNum = assignedToRaw !== undefined && assignedToRaw !== null && assignedToRaw !== '' ? Number(assignedToRaw) : null;
 
-    const verificationTasks = all.filter((t) => t.status === 'SUBMITTED_FOR_REVIEW');
+        const completedByRaw = t.completed_by ?? t.observation?.completed_by ?? (t as any).completer?.emp_id;
+        const completedByNum = completedByRaw !== undefined && completedByRaw !== null && completedByRaw !== '' ? Number(completedByRaw) : null;
 
-    setAllTasksCount(all.length);
-    setUserAssignedCount(userOnlyTasks.length);
-    setVerificationCount(verificationTasks.length);
+        const submittedByMe = t.corrective_actions?.some((ca: any) => Number(ca.submitted_by) === currentEmpId);
+        const isParticipant = t.participants?.some((p) => Number(p.user_id) === currentEmpId);
 
-    // If role is employee, show only tasks assigned to them.
-    // If officer, show their assigned tasks ('MINE'), pending verification queue ('VERIFICATION'), or all tasks ('ALL').
-    let scopedTasks: Task[] = [];
-    if (isUserRole) {
-      scopedTasks = userOnlyTasks;
-    } else {
-      if (officerScope === 'MINE') scopedTasks = userOnlyTasks;
-      else if (officerScope === 'VERIFICATION') scopedTasks = verificationTasks;
-      else scopedTasks = all;
-    }
-    setTasks(scopedTasks);
+        const isAssignedToMe = Boolean(currentEmpId && assignedToNum !== null && assignedToNum === currentEmpId);
+        const isDoneByMe = Boolean(currentEmpId && ((completedByNum !== null && completedByNum === currentEmpId) || submittedByMe));
 
-    const paramTaskId = searchParams.get('taskId');
-    if (paramTaskId) {
-      const match = scopedTasks.find((t) => t.id === paramTaskId || t.task_number === paramTaskId);
-      if (match) setSelectedTask(match);
+        return isAssignedToMe || isDoneByMe || isParticipant;
+      });
+
+      const verificationTasks = all.filter((t) => t.status === 'SUBMITTED_FOR_REVIEW');
+
+      setAllTasksCount(all.length);
+      setUserAssignedCount(userOnlyTasks.length);
+      setVerificationCount(verificationTasks.length);
+
+      // If role is employee, show only tasks assigned to them.
+      // If officer, show their assigned/done tasks ('MINE'), all plant tasks ('ALL'), or pending verification queue ('VERIFICATION').
+      let scopedTasks: Task[] = [];
+      if (isUserRole) {
+        scopedTasks = userOnlyTasks;
+      } else {
+        if (officerScope === 'MINE') scopedTasks = userOnlyTasks;
+        else if (officerScope === 'VERIFICATION') scopedTasks = verificationTasks;
+        else scopedTasks = all;
+      }
+      setTasks(scopedTasks);
+
+      const paramTaskId = searchParams.get('taskId');
+      if (paramTaskId) {
+        const match = scopedTasks.find((t) => t.id === paramTaskId || t.task_number === paramTaskId);
+        if (match) setSelectedTask(match);
+      }
+    } catch (err) {
+      console.error('Error loading tasks:', err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -138,29 +256,31 @@ export const MyTasksPage: React.FC = () => {
           justifyContent: 'space-between',
           flexWrap: 'wrap',
           gap: '14px',
-          marginBottom: '18px',
+          marginBottom: '16px',
         }}
       >
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-              {!isUserRole ? 'Officer Tasks & Verification' : 'My Assigned Tasks'}
+              My Assigned Tasks
             </h2>
           </div>
+
         </div>
 
-        {/* Top Actions */}
+        {/* Top Actions: Add Task Button only for Safety Officer and Admin */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-          {/* Add Task Button */}
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={() => setShowCreateModal(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <PlusCircle size={16} />
-            <span>Add Task</span>
-          </button>
+          {!isUserRole && (
+            <button
+              type="button"
+              className="btn btn-primary"
+              onClick={() => setShowCreateModal(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <PlusCircle size={16} />
+              <span>Add Task</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -234,7 +354,26 @@ export const MyTasksPage: React.FC = () => {
       </div>
 
       {/* Table View */}
-      {filteredTasks.length === 0 ? (
+      {loading ? (
+        <div
+          className="ehs-card"
+          style={{
+            padding: '50px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+          }}
+        >
+          <Loader2 size={32} style={{ color: 'var(--brand-primary)', animation: 'spin 1s linear infinite' }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-primary)' }}>Loading Assigned Tasks...</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Fetching safety action items and progress</div>
+          </div>
+        </div>
+      ) : filteredTasks.length === 0 ? (
         <div className="ehs-card" style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--text-muted)' }}>
           <CheckCircle2 size={36} color="#10b981" style={{ margin: '0 auto 10px' }} />
           <h4 style={{ fontSize: '1rem', color: 'var(--text-primary)', marginBottom: '4px' }}>
@@ -243,15 +382,17 @@ export const MyTasksPage: React.FC = () => {
           <p style={{ fontSize: '0.82rem', marginBottom: '14px' }}>
             No tasks in this category.
           </p>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm"
-            onClick={() => setShowCreateModal(true)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-          >
-            <PlusCircle size={15} />
-            <span>Add Task</span>
-          </button>
+          {!isUserRole && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={() => setShowCreateModal(true)}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+            >
+              <PlusCircle size={15} />
+              <span>Add Task</span>
+            </button>
+          )}
         </div>
       ) : (
         <>
@@ -259,8 +400,14 @@ export const MyTasksPage: React.FC = () => {
             <table className="ehs-table">
               <thead>
                 <tr>
-                  <th style={{ width: '70px' }}>Sr No</th>
+                  <th style={{ minWidth: '150px' }}>Sr No</th>
                   <th>Observation & Task</th>
+                  {!isUserRole && (
+                    <>
+                      <th style={{ minWidth: '120px' }}>Before Image</th>
+                      <th style={{ minWidth: '130px' }}>After Image</th>
+                    </>
+                  )}
                   <th>Department & Area</th>
                   <th>Priority</th>
                   <th>Due Date</th>
@@ -273,6 +420,7 @@ export const MyTasksPage: React.FC = () => {
                   const isPastDue = new Date(task.due_date).getTime() < Date.now();
                   const isOverdue = isPastDue && task.status !== 'COMPLETED' && task.status !== 'CLOSED';
                   const isPendingVerification = task.status === 'SUBMITTED_FOR_REVIEW';
+                  const photoInfo = getTaskPhotosInfo(task);
 
                   return (
                     <tr
@@ -290,33 +438,39 @@ export const MyTasksPage: React.FC = () => {
                       <td style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                           {isOverdue && <AlertTriangle size={14} color="#ef4444" />}
-                          <span>{index + 1}</span>
+                          <span>{task.task_number || task.observation?.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}</span>
                         </div>
                       </td>
 
                       {/* Observation & Task */}
-                      <td style={{ maxWidth: '320px' }}>
+                      <td style={{ maxWidth: '300px' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                          {(() => {
-                            const obsPhotos = task.observation?.photos || (task.observation as any)?.all_photos || task.photos || [];
-                            const p = obsPhotos[0];
-                            const thumbUrl = p ? (p.photo_url || p.url || (typeof p === 'string' ? p : null)) : null;
-                            if (!thumbUrl) return null;
-                            return (
-                              <img
-                                src={thumbUrl}
-                                alt="Observation Thumbnail"
-                                style={{
-                                  width: '38px',
-                                  height: '38px',
-                                  borderRadius: '6px',
-                                  objectFit: 'cover',
-                                  flexShrink: 0,
-                                  border: '1px solid var(--border-subtle)',
-                                }}
-                              />
-                            );
-                          })()}
+                          {isUserRole && photoInfo.beforeUrl && (
+                            <img
+                              src={photoInfo.beforeUrl}
+                              alt="Observation Thumbnail"
+                              title="Hazard Photo (Click to preview)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPreviewImage({
+                                  url: photoInfo.beforeUrl!,
+                                  title: `Observation Hazard Photo — ${task.task_number || task.observation?.observation_number || 'Task'}`,
+                                  badgeText: 'BEFORE HAZARD',
+                                  badgeBg: 'rgba(239, 68, 68, 0.15)',
+                                  badgeColor: '#f87171',
+                                });
+                              }}
+                              style={{
+                                width: '38px',
+                                height: '38px',
+                                borderRadius: '6px',
+                                objectFit: 'cover',
+                                flexShrink: 0,
+                                cursor: 'zoom-in',
+                                border: '1px solid var(--border-subtle)',
+                              }}
+                            />
+                          )}
                           <div style={{ minWidth: 0, flex: 1 }}>
                             <div style={{ fontWeight: 700, color: 'var(--text-primary)', fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                               {task.observation?.observation_text?.split('\n')[0] || task.observation?.area || 'Safety Task'}
@@ -329,6 +483,106 @@ export const MyTasksPage: React.FC = () => {
                           </div>
                         </div>
                       </td>
+
+                      {/* Before Image Column (Officer / Admin) */}
+                      {!isUserRole && (
+                        <td>
+                          {photoInfo.beforeUrl ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <img
+                                src={photoInfo.beforeUrl}
+                                alt="Before hazard condition"
+                                title="Before condition (Click to view full photo)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage({
+                                    url: photoInfo.beforeUrl!,
+                                    title: `Before Hazard Condition — ${task.task_number || task.observation?.observation_number || 'Observation'}`,
+                                    badgeText: 'BEFORE HAZARD',
+                                    badgeBg: 'rgba(239, 68, 68, 0.15)',
+                                    badgeColor: '#f87171',
+                                  });
+                                }}
+                                style={{
+                                  width: '42px',
+                                  height: '42px',
+                                  borderRadius: '6px',
+                                  objectFit: 'cover',
+                                  cursor: 'zoom-in',
+                                  border: '1px solid var(--border-subtle)',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                                }}
+                              />
+                              <span
+                                style={{
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  color: '#64748b',
+                                  background: '#f1f5f9',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                Before{photoInfo.beforeCount > 1 ? ` (+${photoInfo.beforeCount - 1})` : ''}
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                      )}
+
+                      {/* After Image Column (Officer / Admin) */}
+                      {!isUserRole && (
+                        <td>
+                          {photoInfo.afterUrl ? (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                              <img
+                                src={photoInfo.afterUrl}
+                                alt={photoInfo.isCompleted ? 'After resolution' : 'After / Partial proof'}
+                                title={photoInfo.isCompleted ? 'After resolution (Click to view)' : 'After / Partial work (Click to view)'}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setPreviewImage({
+                                    url: photoInfo.afterUrl!,
+                                    title: photoInfo.isCompleted
+                                      ? `After Resolution Proof — ${task.task_number || task.observation?.observation_number || 'Observation'}`
+                                      : `After / Partial Correction — ${task.task_number || task.observation?.observation_number || 'Observation'}`,
+                                    badgeText: photoInfo.isCompleted ? 'RESOLVED PROOF' : 'PARTIAL WORK',
+                                    badgeBg: photoInfo.isCompleted ? 'rgba(22, 163, 74, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                                    badgeColor: photoInfo.isCompleted ? '#4ade80' : '#fbbf24',
+                                  });
+                                }}
+                                style={{
+                                  width: '42px',
+                                  height: '42px',
+                                  borderRadius: '6px',
+                                  objectFit: 'cover',
+                                  cursor: 'zoom-in',
+                                  border: photoInfo.isCompleted ? '1px solid #86efac' : '1px solid #fde047',
+                                  boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+                                }}
+                              />
+                              <span
+                                style={{
+                                  fontSize: '0.7rem',
+                                  fontWeight: 700,
+                                  color: photoInfo.isCompleted ? '#15803d' : photoInfo.isPendingReview ? '#4338ca' : '#b45309',
+                                  background: photoInfo.isCompleted ? '#dcfce7' : photoInfo.isPendingReview ? '#e0e7ff' : '#fef3c7',
+                                  padding: '2px 6px',
+                                  borderRadius: '4px',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                After{photoInfo.afterCount > 1 ? ` (+${photoInfo.afterCount - 1})` : ''}
+                              </span>
+                            </div>
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>—</span>
+                          )}
+                        </td>
+                      )}
 
                       {/* Department & Area */}
                       <td>
@@ -427,7 +681,7 @@ export const MyTasksPage: React.FC = () => {
                     <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                       {isOverdue && <AlertTriangle size={15} color="#ef4444" />}
                       <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.88rem' }}>
-                        #{index + 1} • {task.task_number}
+                        #{index + 1} • {task.task_number || task.observation?.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}
                       </span>
                       <PriorityBadge priority={task.observation?.priority || 'MEDIUM'} showRisk={false} />
                     </div>
@@ -518,6 +772,19 @@ export const MyTasksPage: React.FC = () => {
         isOpen={Boolean(selectedTask)}
         onClose={() => setSelectedTask(null)}
         onTaskUpdated={loadData}
+      />
+
+      {/* Row Image Preview Lightbox Modal */}
+      <ImagePreviewModal
+        isOpen={Boolean(previewImage)}
+        onClose={() => setPreviewImage(null)}
+        imageUrl={previewImage?.url || null}
+        title={previewImage?.title}
+        badge={previewImage?.badgeText ? {
+          text: previewImage.badgeText,
+          bg: previewImage.badgeBg,
+          color: previewImage.badgeColor,
+        } : undefined}
       />
     </div>
   );

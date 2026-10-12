@@ -44,7 +44,9 @@ export const AwaitingReviewPage: React.FC = () => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {tasks.map((task) => {
             const obs = task.observation;
-            const latestAttempt = task.corrective_actions?.[0];
+            const latestAttempt = task.corrective_actions && task.corrective_actions.length > 0 
+              ? task.corrective_actions[task.corrective_actions.length - 1] 
+              : undefined;
 
             return (
               <div

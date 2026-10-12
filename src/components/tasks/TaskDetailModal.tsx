@@ -46,6 +46,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
   // States for admin / officer review
   const [officerNotes, setOfficerNotes] = useState('');
+  const [approvalRemarks, setApprovalRemarks] = useState('');
   const [showReworkBox, setShowReworkBox] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isExporting, setIsExporting] = useState(false);
@@ -80,6 +81,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       setResolutionStage('SUBMITTED_FOR_REVIEW');
       setShowReworkBox(false);
       setOfficerNotes('');
+      setApprovalRemarks('');
       setSolutionRemarks('');
       setPhotos([]);
     }
@@ -130,6 +132,13 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const problemText = obs?.observation_text || loadedObs?.observation_text || (task as any).observation_text || '';
   const solutionText = obs?.solution_text || loadedObs?.solution_text || (task as any).solution_text || '';
   const assignerEmpId = creatorEmpId || Number(task.assigned_by || obs?.created_by || loadedObs?.created_by);
+  const finalApprovalRemarks = task.approval_remarks ||
+    (correctiveActions && correctiveActions.length > 0 ? correctiveActions[correctiveActions.length - 1].approver_remarks : null) ||
+    obs?.solution_text ||
+    null;
+  const approverName = task.completer?.full_name ||
+    (correctiveActions && correctiveActions.length > 0 ? correctiveActions[correctiveActions.length - 1].approver?.full_name : null) ||
+    null;
 
   // Pool of all photos from task and obs
   // Pool of all photos from task and obs
@@ -230,6 +239,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
         beforePhotos,
         afterPhotos,
         correctiveActions,
+        approvalRemarks: finalApprovalRemarks,
+        approverName: approverName,
       });
       showToast({
         type: 'success',
@@ -261,18 +272,31 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
     setIsSubmitting(true);
     try {
+      const isOfficerOrAdmin = Boolean(
+        isOfficer ||
+        (currentUser?.position && currentUser.position.trim().toUpperCase() === 'HEALTH AND SAFETY') ||
+        (currentUser?.role && currentUser.role.toUpperCase() === 'HEALTH_SAFETY_OFFICER') ||
+        (currentUser?.role && currentUser.role.toLowerCase() === 'admin')
+      );
       const isVerificationAction = resolutionStage === 'SUBMITTED_FOR_REVIEW';
+      const shouldCompleteDirectly = isOfficerOrAdmin && isVerificationAction;
 
       await DataService.submitCorrectiveAction({
         task_id: task.observation_id || task.id,
         submitted_by: Number(currentUser.emp_id || currentUser.id),
         action_description: solutionRemarks.trim(),
         photos: photos.map((p) => ({ url: p.url, file_name: p.file_name })),
-        stage: isVerificationAction ? 'SUBMITTED_FOR_REVIEW' : 'PARTIALLY_DONE',
-        markAsCompleted: false,
+        stage: shouldCompleteDirectly ? 'COMPLETED' : (isVerificationAction ? 'SUBMITTED_FOR_REVIEW' : 'PARTIALLY_DONE'),
+        markAsCompleted: shouldCompleteDirectly,
       });
 
-      if (isVerificationAction) {
+      if (shouldCompleteDirectly) {
+        showToast({
+          type: 'success',
+          title: 'Task Completed',
+          message: `${task.task_number} has been completed and closed.`,
+        });
+      } else if (isVerificationAction) {
         showToast({
           type: 'success',
           title: 'Submitted for Verification',
@@ -304,12 +328,22 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   // Admin / Officer review: Verify & Approve (Complete Task)
   const handleAdminApprove = async () => {
     if (!currentUser) return;
+    if (!approvalRemarks.trim()) {
+      showToast({
+        type: 'warning',
+        title: 'Remarks Required',
+        message: 'Please enter verification remarks before approving the task.',
+      });
+      return;
+    }
+
     setIsSubmitting(true);
     try {
       await DataService.reviewTask({
         task_id: task.observation_id || task.id,
         officer_id: currentUser.emp_id || currentUser.id,
         decision: 'COMPLETE',
+        approval_remarks: approvalRemarks.trim(),
       });
 
       try {
@@ -325,8 +359,9 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       showToast({
         type: 'success',
         title: 'Task Verified & Completed',
-        message: `${task.task_number} has been verified and marked as COMPLETED.`,
+        message: `${task.task_number} has been verified with your remarks and marked as COMPLETED.`,
       });
+      setApprovalRemarks('');
       onTaskUpdated();
       onClose();
     } catch (err: any) {
@@ -717,6 +752,30 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                               </p>
                             </div>
                           )}
+
+                          {/* Safety Officer Verification Remarks */}
+                          {(ca.approver_remarks || (isLatest && finalApprovalRemarks)) && (
+                            <div style={{ background: '#ecfdf5', border: '1.5px solid #a7f3d0', borderRadius: '6px', padding: '10px 12px', marginTop: '4px' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '3px' }}>
+                                <span style={{ fontSize: '0.72rem', fontWeight: 700, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                                  Safety Officer Verification Remarks:
+                                </span>
+                                {(ca.approved_at || task.completed_at) && (
+                                  <span style={{ fontSize: '0.68rem', color: '#065f46' }}>
+                                    {formatISTDateTime(ca.approved_at || task.completed_at)}
+                                  </span>
+                                )}
+                              </div>
+                              <p style={{ fontSize: '0.85rem', color: '#065f46', margin: 0, fontWeight: 600, lineHeight: 1.45 }}>
+                                "{ca.approver_remarks || finalApprovalRemarks}"
+                              </p>
+                              {(ca.approver?.full_name || approverName) && (
+                                <div style={{ fontSize: '0.72rem', color: '#047857', marginTop: '4px' }}>
+                                  Verified by: <strong>{ca.approver?.full_name || approverName}</strong>
+                                </div>
+                              )}
+                            </div>
+                          )}
                         </div>
                       );
                     })
@@ -748,12 +807,30 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                           </span>
                         )}
                       </div>
+
+                      {finalApprovalRemarks && (
+                        <div style={{ background: '#ecfdf5', border: '1.5px solid #a7f3d0', borderRadius: '6px', padding: '10px 12px', marginTop: '10px' }}>
+                          <div style={{ fontSize: '0.72rem', fontWeight: 700, color: '#047857', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '3px' }}>
+                            Safety Officer Verification Remarks:
+                          </div>
+                          <p style={{ fontSize: '0.85rem', color: '#065f46', margin: 0, fontWeight: 600, lineHeight: 1.45 }}>
+                            "{finalApprovalRemarks}"
+                          </p>
+                          {approverName && (
+                            <div style={{ fontSize: '0.72rem', color: '#047857', marginTop: '4px' }}>
+                              Verified by: <strong>{approverName}</strong>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )}
 
                   <div style={{ marginTop: 'auto', paddingTop: '10px', borderTop: '1px dashed #a7f3d0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: '0.72rem', color: 'var(--text-muted)' }}>
                     <span>Resolved By: <strong style={{ color: 'var(--text-primary)' }}>{assigneeName || 'Assigned User'}</strong></span>
-                    <span style={{ color: '#059669', fontWeight: 600 }}>Verified & Approved</span>
+                    <span style={{ color: '#059669', fontWeight: 600 }}>
+                      {approverName ? `Verified by ${approverName}` : 'Verified & Approved'}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1006,28 +1083,44 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', marginTop: '4px', flexWrap: 'wrap' }}>
-                    <button
-                      type="button"
-                      className="btn btn-danger btn-sm"
-                      onClick={() => setShowReworkBox(true)}
-                      disabled={isSubmitting}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
-                    >
-                      <RotateCcw size={15} />
-                      <span>Request Rework</span>
-                    </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', background: '#f0fdf4', border: '1.5px solid #86efac', borderRadius: '8px', padding: '12px 14px' }}>
+                      <label className="form-label" style={{ fontWeight: 700, fontSize: '0.82rem', margin: 0, color: '#15803d' }}>
+                        Approver Verification Remarks <span className="required">*</span>
+                      </label>
+                      <textarea
+                        className="form-textarea"
+                        rows={3}
+                        placeholder="Enter remarks for approval (e.g. Work inspected on site, rectification completed to safety standards)..."
+                        value={approvalRemarks}
+                        onChange={(e) => setApprovalRemarks(e.target.value)}
+                        style={{ width: '100%', resize: 'vertical', marginTop: '2px' }}
+                      />
+                    </div>
 
-                    <button
-                      type="button"
-                      className="btn btn-success"
-                      onClick={handleAdminApprove}
-                      disabled={isSubmitting}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 20px', fontWeight: 700 }}
-                    >
-                      <CheckCircle2 size={16} />
-                      <span>{isSubmitting ? 'Verifying...' : 'Verify & Approve (Mark Completed)'}</span>
-                    </button>
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                      <button
+                        type="button"
+                        className="btn btn-danger btn-sm"
+                        onClick={() => setShowReworkBox(true)}
+                        disabled={isSubmitting}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                      >
+                        <RotateCcw size={15} />
+                        <span>Request Rework</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="btn btn-success"
+                        onClick={handleAdminApprove}
+                        disabled={isSubmitting || !approvalRemarks.trim()}
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '8px 20px', fontWeight: 700 }}
+                      >
+                        <CheckCircle2 size={16} />
+                        <span>{isSubmitting ? 'Verifying...' : 'Verify & Approve (Mark Completed)'}</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
@@ -1061,7 +1154,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                 <p style={{ fontSize: '0.84rem', color: 'var(--text-secondary)', margin: 0, lineHeight: 1.5 }}>
                   {isRework
                     ? `This task was sent back for rework. Waiting for ${assigneeName || 'the assigned employee'} to revise and resubmit their corrective action.`
-                    : `This observation task is currently assigned to ${assigneeName || 'the assigned employee'}. Corrective action and closure are awaiting the user's response submission. Once submitted, you will be able to verify and approve completion.`}
+                    : `This observation task is currently assigned to ${assigneeName || 'the assigned employee'}. Corrective action and closure are awaiting the user's response submission.`}
                 </p>
               </div>
             )}
@@ -1193,8 +1286,8 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                       {isSubmitting
                         ? 'Submitting...'
                         : (resolutionStage === 'SUBMITTED_FOR_REVIEW'
-                            ? 'Submit for Verification'
-                            : 'Save as Partially Done')}
+                          ? 'Submit for Verification'
+                          : 'Save as Partially Done')}
                     </span>
                   </button>
                 </div>

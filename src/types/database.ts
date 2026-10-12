@@ -108,13 +108,15 @@ export interface Observation {
   closed_at?: string | null;
   completed_at?: string | null;
   completed_by?: number | string | null;
+  approval_remarks?: string | null;
   created_at: string;
   updated_at: string;
 
   // Relations
   department?: Department;
-  creator?: User;
-  assignee?: User;
+  creator?: User | null;
+  assignee?: User | null;
+  completer?: User | null;
   photos?: ObservationPhoto[];
   initial_photos?: ObservationPhoto[];
   corrective_photos?: ObservationPhoto[];
@@ -142,10 +144,14 @@ export interface CorrectiveAction {
   rework_reason?: string | null;
   reworked_at?: string | null;
   reworked_by?: number | string | null;
+  approver_remarks?: string | null;
+  approved_at?: string | null;
+  approved_by?: number | string | null;
   status?: string; // 'SUBMITTED' | 'REWORK_REQUIRED' | 'APPROVED'
 
   // Relations
-  submitter?: User;
+  submitter?: User | null;
+  approver?: User | null;
   photos?: CorrectiveActionPhoto[];
 }
 
@@ -221,12 +227,13 @@ export interface Task {
   completed_at?: string | null;
   completed_by?: number | string | null;
   rework_reason?: string | null;
+  approval_remarks?: string | null;
 
   // Relations
   observation?: Observation;
-  assignee?: User;
-  assigner?: User;
-  completer?: User;
+  assignee?: User | null;
+  assigner?: User | null;
+  completer?: User | null;
   photos?: ObservationPhoto[];
   initial_photos?: ObservationPhoto[];
   corrective_photos?: ObservationPhoto[];

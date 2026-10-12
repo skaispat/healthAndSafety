@@ -206,9 +206,23 @@ export const TrainingRecordsPage: React.FC = () => {
 
       {/* Loading state */}
       {loading ? (
-        <div className="ehs-card" style={{ padding: '36px', textAlign: 'center', color: 'var(--text-muted)' }}>
-          <Loader2 size={20} className="spinner" style={{ animation: 'spin 1s linear infinite', margin: '0 auto 8px auto' }} />
-          <span style={{ fontSize: '0.85rem' }}>Loading trainings...</span>
+        <div
+          className="ehs-card"
+          style={{
+            padding: '50px 24px',
+            textAlign: 'center',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '12px',
+          }}
+        >
+          <Loader2 size={32} style={{ color: 'var(--brand-primary)', animation: 'spin 1s linear infinite' }} />
+          <div>
+            <div style={{ fontWeight: 700, fontSize: '0.96rem', color: 'var(--text-primary)' }}>Loading Training Records...</div>
+            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '2px' }}>Retrieving plant safety trainings & attendance data</div>
+          </div>
         </div>
       ) : filtered.length === 0 ? (
         /* Empty State */
@@ -326,7 +340,7 @@ export const TrainingRecordsPage: React.FC = () => {
             <table className="ehs-table">
               <thead>
                 <tr>
-                  <th style={{ width: '120px' }}>Code</th>
+                  <th style={{ width: '160px' }}>Sr No</th>
                   <th style={{ width: '150px' }}>Department & Area</th>
                   <th>Topic</th>
                   <th style={{ width: '110px' }}>Headcount</th>

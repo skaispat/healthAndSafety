@@ -368,7 +368,7 @@ export const DataService = {
       allHistory = getStored<ObservationHistoryItem[]>(STORAGE_KEYS.OBSERVATION_HISTORY, []);
     }
 
-    return rawObs.map((obs: any) => {
+    return rawObs.map((obs: any, index: number) => {
       const deptIdNum = Number(obs.dept_id || obs.department_id);
       const createdByNum = Number(obs.created_by);
       const assignedToNum = Number(obs.assigned_to);
@@ -413,15 +413,30 @@ export const DataService = {
         .filter(h => String(h.observation_id) === String(obs.id))
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-      // Reconstruct multi-cycle rework loop attempts (Attempt 1, 2, 3, 4, 5, etc.)
-      const submissionEvents = obsHistory.filter(h => h.action_type === 'SUBMITTED_FOR_REVIEW' || h.action_type === 'COMPLETED');
+      // Reconstruct multi-cycle rework loop attempts (Attempt 1, 2, 3, etc.)
+      // An attempt is formed when employee submits for review
+      const userSubmissions = obsHistory.filter(h => h.action_type === 'SUBMITTED_FOR_REVIEW');
+
+      // Standalone completions (if task was directly completed without a prior SUBMITTED_FOR_REVIEW record)
+      const standaloneCompletions = obsHistory.filter(
+        h => h.action_type === 'COMPLETED' && !userSubmissions.some(s => s.attempt_number === h.attempt_number)
+      );
+
+      const submissionEvents = [...userSubmissions, ...standaloneCompletions].sort(
+        (a, b) => (a.attempt_number || 1) - (b.attempt_number || 1)
+      );
 
       let correctiveActions: CorrectiveAction[] = [];
       if (submissionEvents.length > 0) {
-        correctiveActions = submissionEvents.map(sub => {
+        correctiveActions = submissionEvents.map((sub, sIdx) => {
+          const attemptNum = sub.attempt_number || sIdx + 1;
           // Find any refusal/rework reason recorded for this attempt
           const reworkEvent = obsHistory.find(
-            h => h.action_type === 'REWORK_REQUIRED' && h.attempt_number === sub.attempt_number
+            h => h.action_type === 'REWORK_REQUIRED' && h.attempt_number === attemptNum
+          );
+          // Find any approval recorded for this attempt
+          const approvalEvent = obsHistory.find(
+            h => h.action_type === 'COMPLETED' && h.attempt_number === attemptNum
           );
 
           let subPhotos: any[] = [];
@@ -448,18 +463,23 @@ export const DataService = {
             task_id: String(obs.id),
             submitted_by: sub.performed_by,
             action_description: sub.description,
-            attempt_number: sub.attempt_number || 1,
+            attempt_number: attemptNum,
             submitted_at: sub.created_at,
             submitter: users.find(u => u.emp_id === Number(sub.performed_by)),
             photos: subPhotos,
-            rework_reason: reworkEvent ? reworkEvent.rework_reason : (obs.status === 'REWORK_REQUIRED' && sub.attempt_number === submissionEvents.length ? obs.rework_reason : null),
+            rework_reason: reworkEvent ? reworkEvent.rework_reason : (obs.status === 'REWORK_REQUIRED' && attemptNum === submissionEvents.length ? obs.rework_reason : null),
             reworked_at: reworkEvent ? reworkEvent.created_at : null,
             reworked_by: reworkEvent ? reworkEvent.performed_by : null,
-            status: reworkEvent ? 'REWORK_REQUIRED' : (obs.status === 'COMPLETED' ? 'APPROVED' : 'SUBMITTED'),
+            approver_remarks: approvalEvent ? approvalEvent.description : null,
+            approved_at: approvalEvent ? approvalEvent.created_at : null,
+            approved_by: approvalEvent ? approvalEvent.performed_by : null,
+            approver: approvalEvent ? users.find(u => u.emp_id === Number(approvalEvent.performed_by)) : null,
+            status: reworkEvent ? 'REWORK_REQUIRED' : (approvalEvent || obs.status === 'COMPLETED' ? 'APPROVED' : 'SUBMITTED'),
           };
         });
       } else if (obs.corrective_action) {
         // Fallback for legacy observation records without history table entry
+        const fallbackApproval = [...obsHistory].reverse().find(h => h.action_type === 'COMPLETED');
         correctiveActions = [{
           id: `ca-${obs.id}`,
           task_id: String(obs.id),
@@ -470,7 +490,11 @@ export const DataService = {
           submitter: assignee,
           photos: correctivePhotos,
           rework_reason: obs.rework_reason,
-          status: obs.status === 'REWORK_REQUIRED' ? 'REWORK_REQUIRED' : 'SUBMITTED',
+          approver_remarks: fallbackApproval?.description || (obs.status === 'COMPLETED' ? obs.solution_text : null),
+          approved_at: fallbackApproval ? fallbackApproval.created_at : obs.completed_at,
+          approved_by: fallbackApproval ? fallbackApproval.performed_by : obs.completed_by,
+          approver: users.find(u => u.emp_id === Number(fallbackApproval?.performed_by || obs.completed_by)),
+          status: obs.status === 'REWORK_REQUIRED' ? 'REWORK_REQUIRED' : (obs.status === 'COMPLETED' ? 'APPROVED' : 'SUBMITTED'),
         }];
       }
 
@@ -490,10 +514,18 @@ export const DataService = {
         performer: users.find(u => u.emp_id === Number(h.performed_by)),
       }));
 
+      // Find overall latest approval event and remarks
+      const latestApprovalEvent = [...obsHistory].reverse().find(h => h.action_type === 'COMPLETED');
+      const latestApprovalRemarks = latestApprovalEvent?.description || (obs.status === 'COMPLETED' ? obs.solution_text : null);
+      const completerUser = users.find(u => u.emp_id === Number(obs.completed_by || latestApprovalEvent?.performed_by));
+
+      // Safe observation number with robust fallback
+      const resolvedObsNumber = obs.observation_number || `SKAEHS/2026-27/OB-${String(rawObs.length - index).padStart(2, '0')}`;
+
       // Map as self-contained Task for backwards compatibility with any Task views
       const taskObj: Task = {
         id: String(obs.id),
-        task_number: obs.observation_number,
+        task_number: resolvedObsNumber,
         observation_id: String(obs.id),
         assigned_to: assignedToNum,
         assigned_by: createdByNum,
@@ -504,8 +536,10 @@ export const DataService = {
         completed_at: obs.completed_at,
         completed_by: obs.completed_by,
         rework_reason: obs.rework_reason,
+        approval_remarks: latestApprovalRemarks,
         assignee,
         assigner: creator,
+        completer: completerUser,
         photos: initialPhotos,
         initial_photos: initialPhotos,
         corrective_photos: correctivePhotos,
@@ -516,7 +550,7 @@ export const DataService = {
 
       const result: Observation = {
         id: String(obs.id),
-        observation_number: obs.observation_number,
+        observation_number: resolvedObsNumber,
         created_by: createdByNum,
         dept_id: deptIdNum,
         department_id: String(deptIdNum),
@@ -536,11 +570,13 @@ export const DataService = {
         closed_at: obs.closed_at,
         completed_at: obs.completed_at,
         completed_by: obs.completed_by,
+        approval_remarks: latestApprovalRemarks,
         created_at: obs.created_at,
         updated_at: obs.updated_at,
         department: matchedDept,
         creator,
         assignee,
+        completer: completerUser,
         photos: initialPhotos,
         initial_photos: initialPhotos,
         corrective_photos: correctivePhotos,
@@ -616,7 +652,9 @@ export const DataService = {
     assigned_to: string | number; // selected employee's emp_id
     due_date: string;
     priority: PriorityLevel;
-    photo_urls: { url: string; file_name: string }[];
+    photo_urls?: { url: string; file_name?: string; photo_type?: 'INITIAL' | 'CORRECTIVE' }[];
+    before_photo_urls?: { url: string; file_name?: string }[];
+    after_photo_urls?: { url: string; file_name?: string }[];
     officer_id: string | number; // creator's emp_id
     initialStatus?: ObservationStatus;
     corrective_action?: string;
@@ -624,8 +662,16 @@ export const DataService = {
     const now = new Date().toISOString();
     const obsId = crypto.randomUUID();
     const existingList = await this.getObservations();
-    const obsCount = existingList.length + 1;
-    const obsNumber = `OBS-2026-${String(obsCount).padStart(3, '0')}`;
+    let maxObNum = 0;
+    existingList.forEach((o) => {
+      const match = (o.observation_number || o.task?.task_number || '').match(/OB-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxObNum) maxObNum = num;
+      }
+    });
+    const nextObNum = Math.max(maxObNum + 1, existingList.length + 1);
+    const obsNumber = `SKAEHS/2026-27/OB-${String(nextObNum).padStart(2, '0')}`;
     const risk = PRIORITY_RISK_MAP[params.priority];
 
     const deptIdNum = Number(params.department_id);
@@ -640,17 +686,72 @@ export const DataService = {
 
     const targetStatus: ObservationStatus = params.initialStatus || 'ASSIGNED';
     const isSubmittedForReview = targetStatus === 'SUBMITTED_FOR_REVIEW';
+    const isCompleted = targetStatus === 'COMPLETED';
 
-    const photos: any[] = params.photo_urls.map((p, idx) => ({
+    const photos: any[] = [];
+
+    // 1. Before Photos
+    if (params.before_photo_urls && params.before_photo_urls.length > 0) {
+      params.before_photo_urls.forEach((p, idx) => {
+        photos.push({
+          id: crypto.randomUUID(),
+          observation_id: obsId,
+          photo_url: p.url,
+          url: p.url,
+          file_name: p.file_name || `before_photo_${idx + 1}.jpg`,
+          photo_type: 'INITIAL' as const,
+          uploaded_by: createdByNum,
+          created_at: now,
+        });
+      });
+    }
+
+    // 2. After Photos
+    if (params.after_photo_urls && params.after_photo_urls.length > 0) {
+      params.after_photo_urls.forEach((p, idx) => {
+        photos.push({
+          id: crypto.randomUUID(),
+          observation_id: obsId,
+          photo_url: p.url,
+          url: p.url,
+          file_name: p.file_name || `after_photo_${idx + 1}.jpg`,
+          photo_type: 'CORRECTIVE' as const,
+          uploaded_by: createdByNum,
+          created_at: now,
+        });
+      });
+    }
+
+    // 3. Fallback for photo_urls
+    if (params.photo_urls && params.photo_urls.length > 0) {
+      params.photo_urls.forEach((p, idx) => {
+        photos.push({
+          id: crypto.randomUUID(),
+          observation_id: obsId,
+          photo_url: p.url,
+          url: p.url,
+          file_name: p.file_name || `photo_${idx + 1}.jpg`,
+          photo_type: p.photo_type || (isCompleted || isSubmittedForReview ? 'CORRECTIVE' : 'INITIAL'),
+          uploaded_by: createdByNum,
+          created_at: now,
+        });
+      });
+    }
+
+    const initialPhotos = photos.filter(p => p.photo_type === 'INITIAL');
+    const correctivePhotos = photos.filter(p => p.photo_type === 'CORRECTIVE');
+
+    const correctiveActionsList = (params.corrective_action || correctivePhotos.length > 0 || isCompleted) ? [{
       id: crypto.randomUUID(),
-      observation_id: obsId,
-      photo_url: p.url,
-      url: p.url,
-      file_name: p.file_name || `photo_${idx + 1}.jpg`,
-      photo_type: isSubmittedForReview ? 'CORRECTIVE' : 'INITIAL',
-      uploaded_by: createdByNum,
-      created_at: now
-    }));
+      task_id: obsId,
+      attempt_number: 1,
+      description: params.corrective_action || (isCompleted ? (params.solution_text || 'Corrective action completed directly by Safety Officer / Admin') : (isSubmittedForReview ? 'Submitted for verification' : 'Corrective work in progress')),
+      photos: correctivePhotos,
+      submitted_by: createdByNum,
+      submitted_at: now,
+      created_at: now,
+      submitter: creator,
+    }] : [];
 
     const newObservation: Observation = {
       id: obsId,
@@ -667,18 +768,24 @@ export const DataService = {
       assigned_to: assignedToNum,
       due_date: params.due_date,
       status: targetStatus,
-      corrective_action: isSubmittedForReview ? (params.corrective_action || params.solution_text || 'Submitted for verification') : null,
+      corrective_action: params.corrective_action || (isCompleted ? (params.solution_text || 'Resolved and completed directly by Safety Officer / Admin') : (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
+      completed_by: isCompleted ? createdByNum : null,
+      completed_at: isCompleted ? now : null,
+      closed_by: isCompleted ? createdByNum : null,
+      closed_at: isCompleted ? now : null,
       is_personal: false,
       created_at: now,
       updated_at: now,
       department: matchedDept,
       creator,
       assignee,
+      completer: isCompleted ? creator : undefined,
       photos,
-      initial_photos: photos,
-      corrective_photos: isSubmittedForReview ? photos : [],
+      initial_photos: initialPhotos,
+      corrective_photos: correctivePhotos,
       all_photos: photos,
     };
+    (newObservation as any).corrective_actions = correctiveActionsList;
 
     const taskObj: Task = {
       id: obsId,
@@ -690,18 +797,34 @@ export const DataService = {
       due_date: params.due_date,
       created_at: now,
       updated_at: now,
+      completed_by: isCompleted ? createdByNum : undefined,
+      completed_at: isCompleted ? now : undefined,
       assignee,
       assigner: creator,
+      completer: isCompleted ? creator : undefined,
       photos,
-      initial_photos: photos,
-      corrective_photos: isSubmittedForReview ? photos : [],
+      initial_photos: initialPhotos,
+      corrective_photos: correctivePhotos,
       all_photos: photos,
+      corrective_actions: correctiveActionsList as any,
     };
     newObservation.task = taskObj;
 
     // Notifications to dispatch
     const notificationsToDispatch: Notification[] = [];
-    if (isSubmittedForReview) {
+    if (isCompleted) {
+      notificationsToDispatch.push({
+        id: crypto.randomUUID(),
+        user_id: createdByNum,
+        observation_id: obsId,
+        task_id: obsId,
+        notification_type: 'TASK_COMPLETED',
+        title: `Task Completed: ${obsNumber}`,
+        message: `Task has been logged and marked as Completed.`,
+        is_read: false,
+        created_at: now
+      });
+    } else if (isSubmittedForReview) {
       // Notify Safety Officers / Admins about the submission pending verification
       const officers = await this.getSafetyOfficers();
       officers.forEach(off => {
@@ -751,6 +874,7 @@ export const DataService = {
       try {
         const { error: obsInsertErr } = await supabase.from('observations').insert([{
           id: obsId,
+          observation_number: obsNumber,
           created_by: createdByNum,
           dept_id: deptIdNum,
           area: params.area,
@@ -762,7 +886,11 @@ export const DataService = {
           assigned_to: assignedToNum,
           due_date: params.due_date,
           status: targetStatus,
-          corrective_action: isSubmittedForReview ? (params.corrective_action || params.solution_text || 'Submitted for verification') : null,
+          corrective_action: params.corrective_action || (isCompleted ? (params.solution_text || 'Resolved and completed directly by Safety Officer / Admin') : (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
+          completed_by: isCompleted ? createdByNum : null,
+          completed_at: isCompleted ? now : null,
+          closed_by: isCompleted ? createdByNum : null,
+          closed_at: isCompleted ? now : null,
           is_personal: false
         }]);
 
@@ -776,7 +904,7 @@ export const DataService = {
             observation_id: obsId,
             photo_url: p.photo_url,
             file_name: p.file_name,
-            photo_type: isSubmittedForReview ? 'CORRECTIVE' : 'INITIAL',
+            photo_type: p.photo_type || (isCompleted || isSubmittedForReview ? 'CORRECTIVE' : 'INITIAL'),
             uploaded_by: createdByNum
           })));
           if (photoInsertErr) {
@@ -804,11 +932,13 @@ export const DataService = {
     const initialHistoryItem: ObservationHistoryItem = {
       id: crypto.randomUUID(),
       observation_id: obsId,
-      action_type: isSubmittedForReview ? 'SUBMITTED_FOR_REVIEW' : 'ASSIGNED',
+      action_type: isCompleted ? 'COMPLETED' : (isSubmittedForReview ? 'SUBMITTED_FOR_REVIEW' : 'ASSIGNED'),
       attempt_number: 1,
-      description: isSubmittedForReview
-        ? `Task logged by ${creator?.full_name || 'employee'} and submitted for Safety Officer / Admin verification.`
-        : `Safety observation logged and task assigned to ${assignee?.full_name || 'employee'} (Emp ID: ${assignedToNum}).`,
+      description: isCompleted
+        ? `Task logged and marked Completed directly by Safety Officer / Admin (${creator?.full_name || 'Officer'}).`
+        : (isSubmittedForReview
+          ? `Task logged by ${creator?.full_name || 'employee'} and submitted for Safety Officer / Admin verification.`
+          : `Safety observation logged and task assigned to ${assignee?.full_name || 'employee'} (Emp ID: ${assignedToNum}).`),
       rework_reason: null,
       performed_by: createdByNum,
       previous_status: null,
@@ -842,7 +972,16 @@ export const DataService = {
     const now = new Date().toISOString();
     const obsId = crypto.randomUUID();
     const existingList = await this.getObservations();
-    const obsNumber = `OBS-2026-${String(existingList.length + 1).padStart(3, '0')}`;
+    let maxObNum = 0;
+    existingList.forEach((o) => {
+      const match = (o.observation_number || o.task?.task_number || '').match(/OB-(\d+)/i);
+      if (match) {
+        const num = parseInt(match[1], 10);
+        if (num > maxObNum) maxObNum = num;
+      }
+    });
+    const nextObNum = Math.max(maxObNum + 1, existingList.length + 1);
+    const obsNumber = `SKAEHS/2026-27/OB-${String(nextObNum).padStart(2, '0')}`;
     const risk = PRIORITY_RISK_MAP[params.priority];
     const deptIdNum = Number(params.department_id);
     const officerIdNum = Number(params.officer_id);
@@ -880,6 +1019,7 @@ export const DataService = {
       try {
         await supabase.from('observations').insert([{
           id: obsId,
+          observation_number: obsNumber,
           created_by: officerIdNum,
           dept_id: deptIdNum,
           area: params.area,
@@ -1159,6 +1299,7 @@ export const DataService = {
     officer_id: string | number; // officer emp_id
     decision: 'COMPLETE' | 'REWORK';
     rework_reason?: string;
+    approval_remarks?: string;
   }): Promise<Task> {
     const obs = await this.getObservationById(params.task_id);
     if (!obs) throw new Error('Observation not found');
@@ -1176,6 +1317,8 @@ export const DataService = {
     const lastSubmission = [...obsHistory].reverse().find(h => h.action_type === 'SUBMITTED_FOR_REVIEW' || h.action_type === 'COMPLETED');
     const attemptNumber = lastSubmission ? lastSubmission.attempt_number : 1;
 
+    const enteredApprovalRemarks = params.approval_remarks?.trim() || 'Work inspected on site and verified completed.';
+
     // Record review decision in observation_history table
     const reviewHistoryItem: ObservationHistoryItem = {
       id: crypto.randomUUID(),
@@ -1183,8 +1326,8 @@ export const DataService = {
       action_type: params.decision === 'COMPLETE' ? 'COMPLETED' : 'REWORK_REQUIRED',
       attempt_number: attemptNumber,
       description: params.decision === 'COMPLETE'
-        ? `Officer approved Attempt #${attemptNumber} and marked task as COMPLETED.`
-        : `Officer refused Attempt #${attemptNumber} and requested rework.`,
+        ? enteredApprovalRemarks
+        : (params.rework_reason || `Officer refused Attempt #${attemptNumber} and requested rework.`),
       rework_reason: params.decision === 'REWORK' ? params.rework_reason : null,
       performed_by: officerEmpId,
       previous_status: obs.status,
@@ -1199,6 +1342,7 @@ export const DataService = {
         await supabase.from('observations').update({
           status: newStatus,
           rework_reason: params.decision === 'REWORK' ? params.rework_reason : null,
+          solution_text: params.decision === 'COMPLETE' ? enteredApprovalRemarks : obs.solution_text,
           completed_at: params.decision === 'COMPLETE' ? now : null,
           completed_by: params.decision === 'COMPLETE' ? officerEmpId : null,
           closed_at: params.decision === 'COMPLETE' ? now : null,
@@ -1213,7 +1357,7 @@ export const DataService = {
           observation_id: obs.id,
           notification_type: params.decision === 'COMPLETE' ? 'TASK_COMPLETED' : 'REWORK_REQUESTED',
           title: params.decision === 'COMPLETE' ? `Task Completed: ${obs.observation_number}` : `Rework Required (Attempt #${attemptNumber}): ${obs.observation_number}`,
-          message: params.decision === 'COMPLETE' ? `Your corrective action has been verified and marked completed.` : `Officer requested rework: "${params.rework_reason}"`,
+          message: params.decision === 'COMPLETE' ? `Your corrective action has been verified and marked completed: "${enteredApprovalRemarks}"` : `Officer requested rework: "${params.rework_reason}"`,
           is_read: false
         }]);
       } catch (err) {
@@ -1232,6 +1376,8 @@ export const DataService = {
         obsList[idx].closed_at = now;
         obsList[idx].closed_by = officerEmpId;
         obsList[idx].rework_reason = null;
+        obsList[idx].solution_text = enteredApprovalRemarks;
+        obsList[idx].approval_remarks = enteredApprovalRemarks;
       } else {
         obsList[idx].rework_reason = params.rework_reason;
       }
@@ -1245,7 +1391,7 @@ export const DataService = {
       task_id: obs.id,
       notification_type: params.decision === 'COMPLETE' ? 'TASK_COMPLETED' : 'REWORK_REQUESTED',
       title: params.decision === 'COMPLETE' ? `Task Completed: ${obs.observation_number}` : `Rework Required (Attempt #${attemptNumber}): ${obs.observation_number}`,
-      message: params.decision === 'COMPLETE' ? `Task verified and completed.` : `Officer requested rework: "${params.rework_reason}"`,
+      message: params.decision === 'COMPLETE' ? `Task verified and completed: "${enteredApprovalRemarks}"` : `Officer requested rework: "${params.rework_reason}"`,
       is_read: false,
       created_at: now
     };
@@ -1406,6 +1552,19 @@ export const DataService = {
     const depts = await this.getDepartments();
     const users = await this.getUsers();
 
+    // Build a chronological mapping (oldest to newest) to assign stable sequence numbers:
+    // 1st created -> SKAEHS/2026-27/TR-01, 2nd -> SKAEHS/2026-27/TR-02, etc.
+    const chronological = [...rawTrainings].sort((a, b) => {
+      const timeA = new Date(a.created_at || a.training_date || 0).getTime();
+      const timeB = new Date(b.created_at || b.training_date || 0).getTime();
+      return timeA - timeB;
+    });
+
+    const seqMap = new Map<string, number>();
+    chronological.forEach((item, i) => {
+      seqMap.set(String(item.id), i + 1);
+    });
+
     return rawTrainings.map((t: any, idx: number) => {
       const deptIdNum = Number(t.dept_id || t.department_id);
       const matchedDept = depts.find(d => d.dept_id === deptIdNum || d.id === String(deptIdNum));
@@ -1448,7 +1607,12 @@ export const DataService = {
       }));
 
       const allPhotos = [...groupPhotos, ...attendancePhotos];
-      const trainingNum = t.training_number || `TRN-${new Date(t.training_date || t.created_at || Date.now()).getFullYear()}-${String(rawTrainings.length - idx).padStart(3, '0')}`;
+      const seqIndex = seqMap.get(String(t.id)) || (rawTrainings.length - idx);
+      const formattedSeq = String(seqIndex).padStart(2, '0');
+      const isCustomFormat = typeof t.training_number === 'string' && t.training_number.startsWith('SKAEHS/');
+      const trainingNum = isCustomFormat
+        ? t.training_number
+        : `SKAEHS/2026-27/TR-${formattedSeq}`;
 
       return {
         id: t.id,
@@ -1498,7 +1662,8 @@ export const DataService = {
     const existing = await this.getTrainingRecords();
     const now = new Date().toISOString();
     const trainingId = crypto.randomUUID();
-    const trainingNumber = `TRN-${new Date().getFullYear()}-${String(existing.length + 1).padStart(3, '0')}`;
+    const nextTrNum = existing.length + 1;
+    const trainingNumber = `SKAEHS/2026-27/TR-${String(nextTrNum).padStart(2, '0')}`;
     
     const depts = await this.getDepartments();
     const users = await this.getUsers();
@@ -1768,3 +1933,4 @@ export const DataService = {
     });
   }
 };
+
