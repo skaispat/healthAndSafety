@@ -28,8 +28,12 @@ export const subscribeToDataChanges = (listener: Listener) => {
   };
 };
 
+let notifyTimeout: any = null;
 const notifyListeners = () => {
-  listeners.forEach(l => l());
+  if (notifyTimeout) clearTimeout(notifyTimeout);
+  notifyTimeout = setTimeout(() => {
+    listeners.forEach(l => l());
+  }, 50);
 };
 
 // Storage keys
@@ -41,25 +45,23 @@ const STORAGE_KEYS = {
   NOTIFICATIONS: 'ehs_notifications',
   OBSERVATION_MESSAGES: 'ehs_observation_messages',
   TRAINING_RECORDS: 'ehs_training_records',
-  CLEARED_VERSION: 'ehs_wipeout_v3',
+  CLEARED_VERSION: 'ehs_wipeout_v5',
 };
 
-// Auto-purge stale mock demo data on initial load
+// Auto-purge stale mock / cached data on load so UI strictly reflects Supabase
 (() => {
   try {
     if (typeof window !== 'undefined' && localStorage.getItem(STORAGE_KEYS.CLEARED_VERSION) !== 'true') {
-      localStorage.removeItem(STORAGE_KEYS.DEPARTMENTS);
-      localStorage.removeItem(STORAGE_KEYS.USERS);
       localStorage.removeItem(STORAGE_KEYS.OBSERVATIONS);
+      localStorage.removeItem(STORAGE_KEYS.TRAINING_RECORDS);
+      localStorage.removeItem(STORAGE_KEYS.OBSERVATION_HISTORY);
       localStorage.removeItem(STORAGE_KEYS.NOTIFICATIONS);
       localStorage.removeItem(STORAGE_KEYS.OBSERVATION_MESSAGES);
-      localStorage.removeItem(STORAGE_KEYS.TRAINING_RECORDS);
       localStorage.removeItem('ehs_tasks');
       localStorage.removeItem('ehs_corrective_actions');
       localStorage.removeItem('ehs_task_history');
       localStorage.removeItem('ehs_task_participants');
       localStorage.removeItem('ehs_task_messages');
-      localStorage.removeItem('ehs_active_user_id');
       localStorage.setItem(STORAGE_KEYS.CLEARED_VERSION, 'true');
     }
   } catch (e) {
@@ -93,10 +95,12 @@ function getCircularReplacer() {
   };
 }
 
-function setStored<T>(key: string, value: T): void {
+function setStored<T>(key: string, value: T, notify = true): void {
   try {
     localStorage.setItem(key, JSON.stringify(value, getCircularReplacer()));
-    notifyListeners();
+    if (notify) {
+      notifyListeners();
+    }
   } catch (e) {
     console.error(`Failed to write to localStorage: ${key}`, e);
   }
@@ -150,7 +154,7 @@ export const DataService = {
     const depts = await this.getDepartments();
     const cleanName = name.trim();
     const baseCode = (code || cleanName.slice(0, 4)).replace(/[^A-Za-z0-9]/g, '').toUpperCase() || 'DEPT';
-    
+
     // Ensure code is unique among existing depts
     let cleanCode = baseCode;
     let counter = 1;
@@ -222,8 +226,8 @@ export const DataService = {
 
   async getOrCreateOtherDepartment(customName?: string): Promise<Department> {
     const depts = await this.getDepartments();
-    const existingOther = depts.find(d => 
-      (d.name && d.name.trim().toUpperCase() === 'OTHER') || 
+    const existingOther = depts.find(d =>
+      (d.name && d.name.trim().toUpperCase() === 'OTHER') ||
       (d.dept_name && d.dept_name.trim().toUpperCase() === 'OTHER')
     );
     if (existingOther) {
@@ -314,6 +318,7 @@ export const DataService = {
   // -------------------------------------------------------------
   async getObservations(): Promise<Observation[]> {
     let rawObs: any[] = [];
+    let supabaseSuccess = false;
 
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -334,15 +339,18 @@ export const DataService = {
           }
         }
 
-        if (!error && data) {
+        if (!error && Array.isArray(data)) {
           rawObs = data;
+          supabaseSuccess = true;
+          // Sync localStorage quietly without triggering listener loop
+          setStored(STORAGE_KEYS.OBSERVATIONS, data, false);
         }
       } catch (err) {
         console.warn('Supabase getObservations error, checking local store', err);
       }
     }
 
-    if (rawObs.length === 0) {
+    if (!supabaseSuccess) {
       rawObs = getStored<Observation[]>(STORAGE_KEYS.OBSERVATIONS, []);
     }
 
@@ -351,20 +359,23 @@ export const DataService = {
 
     // Fetch all observation history records for loop tracking
     let allHistory: ObservationHistoryItem[] = [];
+    let historySuccess = false;
     if (isSupabaseConfigured() && supabase) {
       try {
         const { data, error } = await supabase
           .from('observation_history')
           .select('*')
           .order('created_at', { ascending: true });
-        if (!error && data) {
+        if (!error && Array.isArray(data)) {
           allHistory = data;
+          historySuccess = true;
+          setStored(STORAGE_KEYS.OBSERVATION_HISTORY, data, false);
         }
       } catch (err) {
         console.warn('Supabase fetch observation_history error:', err);
       }
     }
-    if (allHistory.length === 0) {
+    if (!historySuccess) {
       allHistory = getStored<ObservationHistoryItem[]>(STORAGE_KEYS.OBSERVATION_HISTORY, []);
     }
 
@@ -605,7 +616,7 @@ export const DataService = {
           .select('*')
           .eq('observation_id', observation_id)
           .order('created_at', { ascending: true });
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           return data;
         }
       } catch (err) {
@@ -1527,6 +1538,7 @@ export const DataService = {
   // -------------------------------------------------------------
   async getTrainingRecords(): Promise<TrainingRecord[]> {
     let rawTrainings: any[] = [];
+    let supabaseSuccess = false;
 
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -1535,8 +1547,11 @@ export const DataService = {
           .select('*')
           .order('training_date', { ascending: false });
 
-        if (!error && data && data.length > 0) {
+        if (!error && Array.isArray(data)) {
           rawTrainings = data;
+          supabaseSuccess = true;
+          // Sync localStorage quietly without triggering listener loop
+          setStored(STORAGE_KEYS.TRAINING_RECORDS, data, false);
         } else if (error) {
           console.warn('Supabase getTrainingRecords error:', error.message);
         }
@@ -1545,7 +1560,7 @@ export const DataService = {
       }
     }
 
-    if (rawTrainings.length === 0) {
+    if (!supabaseSuccess) {
       rawTrainings = getStored<TrainingRecord[]>(STORAGE_KEYS.TRAINING_RECORDS, []);
     }
 
@@ -1571,8 +1586,8 @@ export const DataService = {
       const conductedByIdNum = Number(t.conducted_by || t.created_by);
       const matchedTrainer = users.find(u => u.emp_id === conductedByIdNum || u.id === String(conductedByIdNum));
       const isOther = (matchedDept?.name && matchedDept.name.trim().toUpperCase() === 'OTHER') ||
-                      (matchedDept?.dept_name && matchedDept.dept_name.trim().toUpperCase() === 'OTHER') ||
-                      deptIdNum === 14;
+        (matchedDept?.dept_name && matchedDept.dept_name.trim().toUpperCase() === 'OTHER') ||
+        deptIdNum === 14;
 
       let deptDisplayName = (t.dept_name && t.dept_name.trim())
         ? t.dept_name.trim()
@@ -1664,17 +1679,17 @@ export const DataService = {
     const trainingId = crypto.randomUUID();
     const nextTrNum = existing.length + 1;
     const trainingNumber = `SKAEHS/2026-27/TR-${String(nextTrNum).padStart(2, '0')}`;
-    
+
     const depts = await this.getDepartments();
     const users = await this.getUsers();
 
     const rawDeptId = params.dept_id ?? params.department_id;
     let finalDeptId = Number(rawDeptId);
     let matchedDept = depts.find(d => d.dept_id === finalDeptId || d.id === String(finalDeptId));
-    
+
     // If not found by numeric ID, check by name
     if (!matchedDept && typeof rawDeptId === 'string') {
-      matchedDept = depts.find(d => 
+      matchedDept = depts.find(d =>
         (d.name && d.name.toLowerCase() === rawDeptId.trim().toLowerCase()) ||
         (d.dept_name && d.dept_name.toLowerCase() === rawDeptId.trim().toLowerCase())
       );
@@ -1693,8 +1708,8 @@ export const DataService = {
     let finalDeptName = (params.dept_name || matchedDept?.name || matchedDept?.dept_name || `Department ${finalDeptId}`).trim();
 
     const isOther = (matchedDept?.name && matchedDept.name.trim().toUpperCase() === 'OTHER') ||
-                    (matchedDept?.dept_name && matchedDept.dept_name.trim().toUpperCase() === 'OTHER') ||
-                    finalDeptId === 14;
+      (matchedDept?.dept_name && matchedDept.dept_name.trim().toUpperCase() === 'OTHER') ||
+      finalDeptId === 14;
 
     if (isOther && finalDeptName) {
       if (finalDeptName.toUpperCase() !== 'OTHER' && !/^other\s*\(/i.test(finalDeptName)) {
