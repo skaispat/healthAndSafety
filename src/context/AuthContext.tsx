@@ -39,8 +39,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         );
         if (active) {
           const empId = Number(active.emp_id ?? active.id);
+          const rawDbRole = String((active as any).raw_role || active.role || '').trim();
+          const isDbAdmin = rawDbRole.toLowerCase() === 'admin' || String(active.username || '').toLowerCase() === 'admin';
           const isOfficerRole = String(active.position || '').trim().toUpperCase() === 'HEALTH AND SAFETY';
-          const derivedRole: UserRole = isOfficerRole ? 'HEALTH_SAFETY_OFFICER' : 'EMPLOYEE';
+          const derivedRole: UserRole = isDbAdmin
+            ? 'ADMIN'
+            : (isOfficerRole ? 'HEALTH_SAFETY_OFFICER' : (active.role as UserRole || 'EMPLOYEE'));
           const userObj: User = {
             ...active,
             emp_id: empId,
@@ -56,8 +60,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (savedData) {
             try {
               const parsed = JSON.parse(savedData);
+              const rawDbRole = String(parsed.raw_role || parsed.role || '').trim();
+              const isDbAdmin = rawDbRole.toLowerCase() === 'admin' || String(parsed.username || '').toLowerCase() === 'admin';
               const isOfficerRole = String(parsed.position || '').trim().toUpperCase() === 'HEALTH AND SAFETY';
-              parsed.role = isOfficerRole ? 'HEALTH_SAFETY_OFFICER' : 'EMPLOYEE';
+              parsed.role = isDbAdmin ? 'ADMIN' : (isOfficerRole ? 'HEALTH_SAFETY_OFFICER' : (rawDbRole || 'EMPLOYEE'));
               setCurrentUser(parsed);
               localStorage.setItem('ehs_user_role', parsed.role);
             } catch (_) { }
@@ -154,8 +160,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           // Extract emp_id from users row
           const rawEmpId = dbUser.emp_id ?? dbUser.id ?? dbUser.employee_id;
           const empId = Number(rawEmpId);
+          const rawDbRole = String(dbUser.role || '').trim();
+          const isDbAdmin = rawDbRole.toLowerCase() === 'admin' || String(dbUser.username || '').toLowerCase() === 'admin';
           const isOfficerRole = String(dbUser.position || '').trim().toUpperCase() === 'HEALTH AND SAFETY';
-          const derivedRole: UserRole = isOfficerRole ? 'HEALTH_SAFETY_OFFICER' : 'EMPLOYEE';
+          const derivedRole: UserRole = isDbAdmin
+            ? 'ADMIN'
+            : (isOfficerRole ? 'HEALTH_SAFETY_OFFICER' : (rawDbRole as UserRole || 'EMPLOYEE'));
 
           const userObj: User = {
             emp_id: empId,
@@ -168,6 +178,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             department: dbUser.department,
             department_name: typeof dbUser.department === 'string' ? dbUser.department : (dbUser.department?.name || null),
             role: derivedRole,
+            raw_role: dbUser.role,
             status: dbUser.status || 'active',
             is_active: dbUser.status !== 'inactive',
             user_access: dbUser.user_access,

@@ -1,4 +1,4 @@
-export type UserRole = 'HEALTH_SAFETY_OFFICER' | 'EMPLOYEE';
+export type UserRole = 'HEALTH_SAFETY_OFFICER' | 'EMPLOYEE' | 'ADMIN' | 'admin' | string;
 
 export type PriorityLevel = 'LOW' | 'MEDIUM' | 'HIGH';
 
@@ -55,6 +55,7 @@ export interface User {
   department?: Department | string;
   department_name?: string | null;
   role: string;
+  raw_role?: string | null;
   status: string; // 'active'
   user_access?: string | null;
   dept_id?: number | null;
@@ -138,7 +139,7 @@ export interface CorrectiveAction {
   id: string;
   task_id: string;
   submitted_by: number | string;
-  action_description: string;
+  action_description?: string | null;
   attempt_number: number;
   submitted_at: string;
   rework_reason?: string | null;

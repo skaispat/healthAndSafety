@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Department, User, PriorityLevel, PRIORITY_RISK_MAP } from '../../types/database';
 import { useAuth } from '../../context/AuthContext';
 import { DataService } from '../../services/dataService';
@@ -100,32 +100,52 @@ export const CreateObservationPage: React.FC = () => {
     setDueDate(defaultDue.toISOString().slice(0, 16));
   }, []);
 
-  // Filter employees belonging to the selected department
-  const filteredEmployees = employees.filter((emp) => {
-    if (!departmentId) return false;
-    const deptNum = Number(departmentId);
+  // Filter employees belonging to the selected department (excluding admin users)
+  const filteredEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      // Exclude users whose role is admin only
+      const role = String(emp.role || '').trim().toLowerCase();
+      const rawRole = String(emp.raw_role || '').trim().toLowerCase();
+      const access = String(emp.user_access || '').trim().toLowerCase();
+      const username = String(emp.username || '').trim().toLowerCase();
 
-    // 1. Direct dept_id check
-    if (emp.dept_id !== undefined && emp.dept_id !== null && Number(emp.dept_id) === deptNum) {
-      return true;
-    }
-    if (emp.department_id && Number(emp.department_id) === deptNum) {
-      return true;
-    }
-    if (typeof emp.department === 'object' && emp.department?.dept_id && Number(emp.department.dept_id) === deptNum) {
-      return true;
-    }
+      const isAdmin =
+        role === 'admin' ||
+        role === 'administrator' ||
+        rawRole === 'admin' ||
+        username === 'admin' ||
+        access === 'admin' ||
+        access === 'all';
 
-    // 2. Department name match fallback
-    const selectedDept = departments.find(d => Number(d.dept_id) === deptNum || String(d.dept_id) === departmentId);
-    const selectedDeptName = (selectedDept?.dept_name || selectedDept?.name || '').trim().toUpperCase();
-    const empDeptName = (typeof emp.department === 'string' ? emp.department : emp.department?.name || emp.department_name || '').trim().toUpperCase();
-    if (selectedDeptName && empDeptName && selectedDeptName === empDeptName) {
-      return true;
-    }
+      if (isAdmin) {
+        return false;
+      }
 
-    return false;
-  });
+      if (!departmentId) return false;
+      const deptNum = Number(departmentId);
+
+      // 1. Direct dept_id check
+      if (emp.dept_id !== undefined && emp.dept_id !== null && Number(emp.dept_id) === deptNum) {
+        return true;
+      }
+      if (emp.department_id && Number(emp.department_id) === deptNum) {
+        return true;
+      }
+      if (typeof emp.department === 'object' && emp.department?.dept_id && Number(emp.department.dept_id) === deptNum) {
+        return true;
+      }
+
+      // 2. Department name match fallback
+      const selectedDept = departments.find(d => Number(d.dept_id) === deptNum || String(d.dept_id) === departmentId);
+      const selectedDeptName = (selectedDept?.dept_name || selectedDept?.name || '').trim().toUpperCase();
+      const empDeptName = (typeof emp.department === 'string' ? emp.department : emp.department?.name || emp.department_name || '').trim().toUpperCase();
+      if (selectedDeptName && empDeptName && selectedDeptName === empDeptName) {
+        return true;
+      }
+
+      return false;
+    });
+  }, [employees, departmentId, departments]);
 
   // Automatically update assignedTo when department or filtered employees change
   useEffect(() => {
@@ -137,7 +157,7 @@ export const CreateObservationPage: React.FC = () => {
     } else {
       setAssignedTo('');
     }
-  }, [departmentId, employees]);
+  }, [filteredEmployees, assignedTo]);
 
   const riskInfo = PRIORITY_RISK_MAP[priority];
   const selectedDeptObj = departments.find(d => String(d.dept_id) === String(departmentId));

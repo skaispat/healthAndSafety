@@ -370,41 +370,142 @@ export const AllObservationsPage: React.FC = () => {
                         <td style={{ fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', whiteSpace: 'nowrap' }}>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span>{obs.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}</span>
-                            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>#{index + 1}</span>
                           </div>
                         </td>
-                    <td>
-                      <div style={{ fontWeight: 600 }}>{obs.department?.name || 'N/A'}</div>
-                      <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{obs.area}</div>
-                    </td>
-                    <td style={{ maxWidth: '300px' }}>
-                      <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                        {obs.observation_text}
+                        <td>
+                          <div style={{ fontWeight: 600 }}>{obs.department?.name || 'N/A'}</div>
+                          <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{obs.area}</div>
+                        </td>
+                        <td style={{ maxWidth: '300px' }}>
+                          <div style={{ fontSize: '0.85rem', color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {obs.observation_text}
+                          </div>
+                        </td>
+                        <td>
+                          <PriorityBadge priority={obs.priority} />
+                        </td>
+                        <td>
+                          {obs.is_personal ? (
+                            <span className="badge" style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-subtle)' }}>
+                              Personal Log
+                            </span>
+                          ) : (
+                            <span style={{ fontSize: '0.85rem', color: 'var(--brand-secondary)', fontWeight: 600 }}>
+                              {obs.assignee?.full_name || `Emp #${obs.assigned_to}`}
+                            </span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
+                          {obs.due_date ? formatISTDate(obs.due_date) : '—'}
+                        </td>
+                        <td>
+                          <ObservationStatusBadge status={obs.status} />
+                        </td>
+                        <td>
+                          {isReviewNeeded ? (
+                            <button
+                              className="btn btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openObsDetails(obs);
+                              }}
+                              style={{
+                                background: '#f59e0b',
+                                borderColor: '#d97706',
+                                color: '#ffffff',
+                                fontWeight: 700,
+                                fontSize: '0.78rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '4px',
+                                padding: '5px 12px',
+                              }}
+                              title="Review submission and send OK or Resubmit"
+                            >
+                              <ShieldCheck size={14} />
+                              <span>Review</span>
+                            </button>
+                          ) : (
+                            <button
+                              className="btn-outline btn-sm"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openObsDetails(obs);
+                              }}
+                              style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                              <Eye size={14} />
+                              <span>View</span>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Observations Mobile Cards View */}
+          <div className="cards-mobile-view">
+            {filteredObservations.length === 0 ? (
+              <div className="ehs-card" style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
+                No observations found matching current filters.
+              </div>
+            ) : (
+              filteredObservations.map((obs, index) => {
+                const isReviewNeeded = obs.status === 'SUBMITTED_FOR_REVIEW';
+
+                return (
+                  <div
+                    key={obs.id}
+                    className="mobile-data-card"
+                    onClick={() => openObsDetails(obs)}
+                    style={{
+                      borderLeft: isReviewNeeded ? '4px solid #f59e0b' : undefined,
+                      background: isReviewNeeded ? 'rgba(245, 158, 11, 0.03)' : '#ffffff',
+                    }}
+                  >
+                    <div className="mobile-card-row">
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.88rem' }}>
+                          #{index + 1} • {obs.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}
+                        </span>
+                        <PriorityBadge priority={obs.priority} />
                       </div>
-                    </td>
-                    <td>
-                      <PriorityBadge priority={obs.priority} />
-                    </td>
-                    <td>
-                      {obs.is_personal ? (
-                        <span className="badge" style={{ background: 'var(--bg-surface-elevated)', border: '1px solid var(--border-subtle)' }}>
-                          Personal Log
-                        </span>
-                      ) : (
-                        <span style={{ fontSize: '0.85rem', color: 'var(--brand-secondary)', fontWeight: 600 }}>
-                          {obs.assignee?.full_name || `Emp #${obs.assigned_to}`}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)', whiteSpace: 'nowrap' }}>
-                      {obs.due_date ? formatISTDate(obs.due_date) : '—'}
-                    </td>
-                    <td>
                       <ObservationStatusBadge status={obs.status} />
-                    </td>
-                    <td>
+                    </div>
+
+                    <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
+                      {obs.observation_text}
+                    </div>
+
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Department / Area</span>
+                      <span className="mobile-card-val">
+                        {obs.department?.name || 'Plant'} • {obs.area}
+                      </span>
+                    </div>
+
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Assignee</span>
+                      <span className="mobile-card-val" style={{ color: 'var(--brand-secondary)' }}>
+                        {obs.is_personal ? 'Personal Log' : (obs.assignee?.full_name || `Emp #${obs.assigned_to}`)}
+                      </span>
+                    </div>
+
+                    <div className="mobile-card-row">
+                      <span className="mobile-card-label">Target Date</span>
+                      <span className="mobile-card-val">
+                        {obs.due_date ? formatISTDate(obs.due_date) : '—'}
+                      </span>
+                    </div>
+
+                    <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}>
                       {isReviewNeeded ? (
                         <button
+                          type="button"
                           className="btn btn-sm"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -415,148 +516,46 @@ export const AllObservationsPage: React.FC = () => {
                             borderColor: '#d97706',
                             color: '#ffffff',
                             fontWeight: 700,
-                            fontSize: '0.78rem',
+                            fontSize: '0.8rem',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '4px',
-                            padding: '5px 12px',
+                            gap: '6px',
+                            width: '100%',
+                            justifyContent: 'center',
+                            padding: '8px 12px',
                           }}
-                          title="Review submission and send OK or Resubmit"
                         >
-                          <ShieldCheck size={14} />
-                          <span>Review</span>
+                          <ShieldCheck size={15} />
+                          <span>Review & Approve</span>
                         </button>
                       ) : (
                         <button
+                          type="button"
                           className="btn-outline btn-sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             openObsDetails(obs);
                           }}
-                          style={{ display: 'flex', alignItems: 'center', gap: '4px' }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            width: '100%',
+                            justifyContent: 'center',
+                            padding: '8px 12px',
+                          }}
                         >
-                          <Eye size={14} />
-                          <span>View</span>
+                          <Eye size={15} />
+                          <span>View Details</span>
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })
             )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Observations Mobile Cards View */}
-      <div className="cards-mobile-view">
-        {filteredObservations.length === 0 ? (
-          <div className="ehs-card" style={{ textAlign: 'center', padding: '36px', color: 'var(--text-muted)' }}>
-            No observations found matching current filters.
           </div>
-        ) : (
-          filteredObservations.map((obs, index) => {
-            const isReviewNeeded = obs.status === 'SUBMITTED_FOR_REVIEW';
-
-            return (
-              <div
-                key={obs.id}
-                className="mobile-data-card"
-                onClick={() => openObsDetails(obs)}
-                style={{
-                  borderLeft: isReviewNeeded ? '4px solid #f59e0b' : undefined,
-                  background: isReviewNeeded ? 'rgba(245, 158, 11, 0.03)' : '#ffffff',
-                }}
-              >
-                <div className="mobile-card-row">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.88rem' }}>
-                      #{index + 1} • {obs.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}
-                    </span>
-                    <PriorityBadge priority={obs.priority} />
-                  </div>
-                  <ObservationStatusBadge status={obs.status} />
-                </div>
-
-                <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
-                  {obs.observation_text}
-                </div>
-
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Department / Area</span>
-                  <span className="mobile-card-val">
-                    {obs.department?.name || 'Plant'} • {obs.area}
-                  </span>
-                </div>
-
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Assignee</span>
-                  <span className="mobile-card-val" style={{ color: 'var(--brand-secondary)' }}>
-                    {obs.is_personal ? 'Personal Log' : (obs.assignee?.full_name || `Emp #${obs.assigned_to}`)}
-                  </span>
-                </div>
-
-                <div className="mobile-card-row">
-                  <span className="mobile-card-label">Target Date</span>
-                  <span className="mobile-card-val">
-                    {obs.due_date ? formatISTDate(obs.due_date) : '—'}
-                  </span>
-                </div>
-
-                <div style={{ marginTop: '4px', display: 'flex', justifyContent: 'flex-end' }}>
-                  {isReviewNeeded ? (
-                    <button
-                      type="button"
-                      className="btn btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openObsDetails(obs);
-                      }}
-                      style={{
-                        background: '#f59e0b',
-                        borderColor: '#d97706',
-                        color: '#ffffff',
-                        fontWeight: 700,
-                        fontSize: '0.8rem',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        width: '100%',
-                        justifyContent: 'center',
-                        padding: '8px 12px',
-                      }}
-                    >
-                      <ShieldCheck size={15} />
-                      <span>Review & Approve</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn-outline btn-sm"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openObsDetails(obs);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '6px',
-                        width: '100%',
-                        justifyContent: 'center',
-                        padding: '8px 12px',
-                      }}
-                    >
-                      <Eye size={15} />
-                      <span>View Details</span>
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
-      </>
+        </>
       )}
 
       {/* Task Detail & Admin Review Modal */}

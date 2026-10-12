@@ -105,10 +105,10 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
                 <span>All Observations & Tasks</span>
               </NavLink>
 
-              {/* 3. My Assigned Tasks */}
+              {/* 3. My Task */}
               <NavLink to="/my-tasks" className={navLinkClass} onClick={onClose}>
                 <Clock size={18} />
-                <span>My Assigned Tasks</span>
+                <span>My Task</span>
               </NavLink>
 
               {/* 4. Safety Training Records */}
@@ -128,7 +128,7 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
             <>
               <NavLink to="/my-tasks" end className={navLinkClass} onClick={onClose}>
                 <CheckSquare size={18} />
-                <span>My Tasks</span>
+                <span>My Task</span>
               </NavLink>
             </>
           )}

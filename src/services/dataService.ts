@@ -256,8 +256,12 @@ export const DataService = {
               name: u.department || 'General',
               code: 'GEN'
             };
+            const rawDbRole = u.role ? String(u.role).trim() : '';
+            const isDbAdmin = rawDbRole.toLowerCase() === 'admin' || String(u.username || '').toLowerCase() === 'admin';
             const isHealthSafetyOfficer = String(u.position || '').trim().toUpperCase() === 'HEALTH AND SAFETY';
-            const derivedRole = isHealthSafetyOfficer ? 'HEALTH_SAFETY_OFFICER' : 'EMPLOYEE';
+            const derivedRole = isDbAdmin
+              ? 'ADMIN'
+              : (isHealthSafetyOfficer ? 'HEALTH_SAFETY_OFFICER' : (rawDbRole || 'EMPLOYEE'));
             return {
               emp_id: empIdNum,
               id: String(empIdNum),
@@ -270,6 +274,7 @@ export const DataService = {
               dept_id: deptIdNum,
               department_id: deptIdNum ? String(deptIdNum) : null,
               role: derivedRole,
+              raw_role: u.role,
               status: u.status || 'active',
               is_active: u.status === 'active',
               user_access: u.user_access,
@@ -424,23 +429,42 @@ export const DataService = {
         .filter(h => String(h.observation_id) === String(obs.id))
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
-      // Reconstruct multi-cycle rework loop attempts (Attempt 1, 2, 3, etc.)
-      // An attempt is formed when employee submits for review
-      const userSubmissions = obsHistory.filter(h => h.action_type === 'SUBMITTED_FOR_REVIEW');
+      // Reconstruct all progress updates, attempts, and submissions:
+      // Includes active progress updates (IN_PROGRESS) and reviews (SUBMITTED_FOR_REVIEW)
+      const userSubmissions = obsHistory.filter(
+        h => h.action_type === 'SUBMITTED_FOR_REVIEW' || h.action_type === 'IN_PROGRESS'
+      );
 
-      // Standalone completions (if task was directly completed without a prior SUBMITTED_FOR_REVIEW record)
+const isBoilerplateRemark = (text?: string | null): boolean => {
+  if (!text) return true;
+  const t = text.trim();
+  return (
+    t.startsWith('Task logged and marked Completed directly') ||
+    t.startsWith('Corrective action completed directly') ||
+    t.startsWith('Resolved and completed directly') ||
+    t.startsWith('Corrective work in progress') ||
+    t.startsWith('Safety observation logged and task assigned') ||
+    t.startsWith('Task logged by') ||
+    t === 'No remarks provided.'
+  );
+};
+
+      // Standalone completions (if task was directly completed without a prior submission record)
       const standaloneCompletions = obsHistory.filter(
         h => h.action_type === 'COMPLETED' && !userSubmissions.some(s => s.attempt_number === h.attempt_number)
       );
 
       const submissionEvents = [...userSubmissions, ...standaloneCompletions].sort(
-        (a, b) => (a.attempt_number || 1) - (b.attempt_number || 1)
+        (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
       );
 
       let correctiveActions: CorrectiveAction[] = [];
       if (submissionEvents.length > 0) {
         correctiveActions = submissionEvents.map((sub, sIdx) => {
           const attemptNum = sub.attempt_number || sIdx + 1;
+          const isDirectCompletion = sub.action_type === 'COMPLETED';
+          const isPartialUpdate = sub.action_type === 'IN_PROGRESS';
+
           // Find any refusal/rework reason recorded for this attempt
           const reworkEvent = obsHistory.find(
             h => h.action_type === 'REWORK_REQUIRED' && h.attempt_number === attemptNum
@@ -461,7 +485,7 @@ export const DataService = {
               uploaded_by: sub.performed_by,
               created_at: sub.created_at,
             }));
-          } else {
+          } else if (submissionEvents.length === 1) {
             // Check if there are corrective photos matching this submitter
             const matchingPhotos = correctivePhotos.filter(cp => Number(cp.uploaded_by) === Number(sub.performed_by));
             if (matchingPhotos.length > 0) {
@@ -469,11 +493,51 @@ export const DataService = {
             }
           }
 
+          // Resolve genuine approver remarks (only for final verification/completion, not intermediate progress updates)
+          let resolvedApproverRemarks: string | null = null;
+          if (!isPartialUpdate) {
+            if (approvalEvent && !isBoilerplateRemark(approvalEvent.description)) {
+              resolvedApproverRemarks = approvalEvent.description.trim();
+            } else if (sub.action_type === 'COMPLETED' && !isBoilerplateRemark(sub.description)) {
+              resolvedApproverRemarks = sub.description.trim();
+            } else if (obs.solution_text && !isBoilerplateRemark(obs.solution_text)) {
+              resolvedApproverRemarks = obs.solution_text.trim();
+            } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
+              resolvedApproverRemarks = obs.approval_remarks.trim();
+            } else if (approvalEvent || isDirectCompletion || (obs.status === 'COMPLETED' && sIdx === submissionEvents.length - 1)) {
+              resolvedApproverRemarks = 'Verified and approved.';
+            }
+          }
+
+          // Resolve genuine user remarks (always preserved for in-progress updates and submissions)
+          let resolvedUserRemarks: string | null = null;
+          if (isPartialUpdate) {
+            resolvedUserRemarks = sub.description ? sub.description.trim() : 'Work in progress update.';
+          } else if (!isDirectCompletion && sub.description && !isBoilerplateRemark(sub.description)) {
+            const trimmedDesc = sub.description.trim();
+            if (trimmedDesc !== (resolvedApproverRemarks || '').trim()) {
+              resolvedUserRemarks = trimmedDesc;
+            }
+          }
+
+          let recordStatus: string = 'SUBMITTED';
+          if (reworkEvent) {
+            recordStatus = 'REWORK_REQUIRED';
+          } else if (approvalEvent || isDirectCompletion) {
+            recordStatus = 'APPROVED';
+          } else if (isPartialUpdate) {
+            recordStatus = 'IN_PROGRESS';
+          } else if (obs.status === 'COMPLETED' && sIdx === submissionEvents.length - 1) {
+            recordStatus = 'APPROVED';
+          } else {
+            recordStatus = 'SUBMITTED';
+          }
+
           return {
             id: sub.id,
             task_id: String(obs.id),
             submitted_by: sub.performed_by,
-            action_description: sub.description,
+            action_description: resolvedUserRemarks,
             attempt_number: attemptNum,
             submitted_at: sub.created_at,
             submitter: users.find(u => u.emp_id === Number(sub.performed_by)),
@@ -481,27 +545,46 @@ export const DataService = {
             rework_reason: reworkEvent ? reworkEvent.rework_reason : (obs.status === 'REWORK_REQUIRED' && attemptNum === submissionEvents.length ? obs.rework_reason : null),
             reworked_at: reworkEvent ? reworkEvent.created_at : null,
             reworked_by: reworkEvent ? reworkEvent.performed_by : null,
-            approver_remarks: approvalEvent ? approvalEvent.description : null,
-            approved_at: approvalEvent ? approvalEvent.created_at : null,
-            approved_by: approvalEvent ? approvalEvent.performed_by : null,
-            approver: approvalEvent ? users.find(u => u.emp_id === Number(approvalEvent.performed_by)) : null,
-            status: reworkEvent ? 'REWORK_REQUIRED' : (approvalEvent || obs.status === 'COMPLETED' ? 'APPROVED' : 'SUBMITTED'),
+            approver_remarks: resolvedApproverRemarks,
+            approved_at: approvalEvent ? approvalEvent.created_at : (isDirectCompletion ? sub.created_at : null),
+            approved_by: approvalEvent ? approvalEvent.performed_by : (isDirectCompletion ? sub.performed_by : null),
+            approver: (approvalEvent || isDirectCompletion) ? users.find(u => u.emp_id === Number(approvalEvent?.performed_by || sub.performed_by)) : null,
+            status: recordStatus,
           };
         });
-      } else if (obs.corrective_action) {
+      } else if (obs.corrective_action || obs.solution_text || obs.status === 'COMPLETED') {
         // Fallback for legacy observation records without history table entry
         const fallbackApproval = [...obsHistory].reverse().find(h => h.action_type === 'COMPLETED');
+        let legacyApproverRemarks: string | null = null;
+        if (fallbackApproval && !isBoilerplateRemark(fallbackApproval.description)) {
+          legacyApproverRemarks = fallbackApproval.description.trim();
+        } else if (obs.solution_text && !isBoilerplateRemark(obs.solution_text)) {
+          legacyApproverRemarks = obs.solution_text.trim();
+        } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
+          legacyApproverRemarks = obs.approval_remarks.trim();
+        } else if (obs.status === 'COMPLETED') {
+          legacyApproverRemarks = 'Verified and approved.';
+        }
+
+        let legacyUserRemarks: string | null = null;
+        if (obs.corrective_action && !isBoilerplateRemark(obs.corrective_action)) {
+          const trimmed = obs.corrective_action.trim();
+          if (trimmed !== (legacyApproverRemarks || '').trim()) {
+            legacyUserRemarks = trimmed;
+          }
+        }
+
         correctiveActions = [{
           id: `ca-${obs.id}`,
           task_id: String(obs.id),
           submitted_by: assignedToNum,
-          action_description: obs.corrective_action,
+          action_description: legacyUserRemarks,
           attempt_number: 1,
           submitted_at: obs.updated_at,
           submitter: assignee,
           photos: correctivePhotos,
           rework_reason: obs.rework_reason,
-          approver_remarks: fallbackApproval?.description || (obs.status === 'COMPLETED' ? obs.solution_text : null),
+          approver_remarks: legacyApproverRemarks,
           approved_at: fallbackApproval ? fallbackApproval.created_at : obs.completed_at,
           approved_by: fallbackApproval ? fallbackApproval.performed_by : obs.completed_by,
           approver: users.find(u => u.emp_id === Number(fallbackApproval?.performed_by || obs.completed_by)),
@@ -527,7 +610,16 @@ export const DataService = {
 
       // Find overall latest approval event and remarks
       const latestApprovalEvent = [...obsHistory].reverse().find(h => h.action_type === 'COMPLETED');
-      const latestApprovalRemarks = latestApprovalEvent?.description || (obs.status === 'COMPLETED' ? obs.solution_text : null);
+      let latestApprovalRemarks: string | null = null;
+      if (latestApprovalEvent && !isBoilerplateRemark(latestApprovalEvent.description)) {
+        latestApprovalRemarks = latestApprovalEvent.description.trim();
+      } else if (obs.solution_text && !isBoilerplateRemark(obs.solution_text)) {
+        latestApprovalRemarks = obs.solution_text.trim();
+      } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
+        latestApprovalRemarks = obs.approval_remarks.trim();
+      } else if (obs.status === 'COMPLETED') {
+        latestApprovalRemarks = 'Verified and approved.';
+      }
       const completerUser = users.find(u => u.emp_id === Number(obs.completed_by || latestApprovalEvent?.performed_by));
 
       // Safe observation number with robust fallback
@@ -752,11 +844,14 @@ export const DataService = {
     const initialPhotos = photos.filter(p => p.photo_type === 'INITIAL');
     const correctivePhotos = photos.filter(p => p.photo_type === 'CORRECTIVE');
 
+    const resolvedAdminRemark = (params.solution_text || params.corrective_action || '').trim();
+
     const correctiveActionsList = (params.corrective_action || correctivePhotos.length > 0 || isCompleted) ? [{
       id: crypto.randomUUID(),
       task_id: obsId,
       attempt_number: 1,
-      description: params.corrective_action || (isCompleted ? (params.solution_text || 'Corrective action completed directly by Safety Officer / Admin') : (isSubmittedForReview ? 'Submitted for verification' : 'Corrective work in progress')),
+      description: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : 'Corrective work in progress')),
+      approver_remarks: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : null,
       photos: correctivePhotos,
       submitted_by: createdByNum,
       submitted_at: now,
@@ -772,18 +867,19 @@ export const DataService = {
       department_id: String(deptIdNum),
       area: params.area,
       observation_text: params.observation_text,
-      solution_text: params.solution_text || null,
+      solution_text: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : (params.solution_text || null),
       priority: params.priority,
       risk_min: risk.min,
       risk_max: risk.max,
       assigned_to: assignedToNum,
       due_date: params.due_date,
       status: targetStatus,
-      corrective_action: params.corrective_action || (isCompleted ? (params.solution_text || 'Resolved and completed directly by Safety Officer / Admin') : (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
+      corrective_action: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
       completed_by: isCompleted ? createdByNum : null,
       completed_at: isCompleted ? now : null,
       closed_by: isCompleted ? createdByNum : null,
       closed_at: isCompleted ? now : null,
+      approval_remarks: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : null,
       is_personal: false,
       created_at: now,
       updated_at: now,
@@ -810,6 +906,7 @@ export const DataService = {
       updated_at: now,
       completed_by: isCompleted ? createdByNum : undefined,
       completed_at: isCompleted ? now : undefined,
+      approval_remarks: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : null,
       assignee,
       assigner: creator,
       completer: isCompleted ? creator : undefined,
@@ -890,14 +987,14 @@ export const DataService = {
           dept_id: deptIdNum,
           area: params.area,
           observation_text: params.observation_text,
-          solution_text: params.solution_text || null,
+          solution_text: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : (params.solution_text || null),
           priority: params.priority,
           risk_min: risk.min,
           risk_max: risk.max,
           assigned_to: assignedToNum,
           due_date: params.due_date,
           status: targetStatus,
-          corrective_action: params.corrective_action || (isCompleted ? (params.solution_text || 'Resolved and completed directly by Safety Officer / Admin') : (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
+          corrective_action: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
           completed_by: isCompleted ? createdByNum : null,
           completed_at: isCompleted ? now : null,
           closed_by: isCompleted ? createdByNum : null,
@@ -946,9 +1043,9 @@ export const DataService = {
       action_type: isCompleted ? 'COMPLETED' : (isSubmittedForReview ? 'SUBMITTED_FOR_REVIEW' : 'ASSIGNED'),
       attempt_number: 1,
       description: isCompleted
-        ? `Task logged and marked Completed directly by Safety Officer / Admin (${creator?.full_name || 'Officer'}).`
+        ? (resolvedAdminRemark || 'Verified and completed.')
         : (isSubmittedForReview
-          ? `Task logged by ${creator?.full_name || 'employee'} and submitted for Safety Officer / Admin verification.`
+          ? (params.solution_text || `Task logged by ${creator?.full_name || 'employee'} and submitted for verification.`)
           : `Safety observation logged and task assigned to ${assignee?.full_name || 'employee'} (Emp ID: ${assignedToNum}).`),
       rework_reason: null,
       performed_by: createdByNum,
@@ -958,6 +1055,23 @@ export const DataService = {
       created_at: now
     };
     await this.recordObservationHistory(initialHistoryItem);
+
+    if (targetStatus === 'IN_PROGRESS' && (params.corrective_action || correctivePhotos.length > 0)) {
+      const initialProgressHistoryItem: ObservationHistoryItem = {
+        id: crypto.randomUUID(),
+        observation_id: obsId,
+        action_type: 'IN_PROGRESS',
+        attempt_number: 1,
+        description: params.corrective_action || 'Saved as Active task with initial progress',
+        rework_reason: null,
+        performed_by: createdByNum,
+        previous_status: null,
+        new_status: 'IN_PROGRESS',
+        photos: correctivePhotos.map(p => ({ url: p.photo_url || p.url, file_name: p.file_name })),
+        created_at: now
+      };
+      await this.recordObservationHistory(initialProgressHistoryItem);
+    }
 
     // Persist to local storage cache
     const storedObs = getStored<Observation[]>(STORAGE_KEYS.OBSERVATIONS, []);

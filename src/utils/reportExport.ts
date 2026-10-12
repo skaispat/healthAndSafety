@@ -65,14 +65,39 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
 
   const nowIST = formatISTDateTime(new Date().toISOString());
 
+  const isBoilerplate = (text?: string | null): boolean => {
+    if (!text) return true;
+    const t = text.trim();
+    return (
+      t.startsWith('Task logged and marked Completed directly') ||
+      t.startsWith('Corrective action completed directly') ||
+      t.startsWith('Resolved and completed directly') ||
+      t.startsWith('Corrective action executed and verified') ||
+      t.startsWith('Safety observation logged and task assigned') ||
+      t.startsWith('Task logged by') ||
+      t === 'No remarks provided.'
+    );
+  };
+
+  const getGenuineRemark = (...candidates: (string | null | undefined)[]): string | null => {
+    for (const c of candidates) {
+      if (c && !isBoilerplate(c)) {
+        return c.trim();
+      }
+    }
+    return null;
+  };
+
   // Determine final approval remarks from parameter or task/action records
-  const finalApprovalRemarks = approvalRemarks ||
-    task.approval_remarks ||
-    (correctiveActions && correctiveActions.length > 0
+  const finalApprovalRemarks = getGenuineRemark(
+    approvalRemarks,
+    task.approval_remarks,
+    correctiveActions && correctiveActions.length > 0
       ? correctiveActions[correctiveActions.length - 1].approver_remarks
-      : null) ||
-    task.observation?.solution_text ||
-    null;
+      : null,
+    task.observation?.approval_remarks,
+    task.observation?.solution_text
+  );
 
   const resolvedApproverName = approverName ||
     task.completer?.full_name ||
@@ -186,7 +211,7 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
           <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${dueDate ? formatISTDate(dueDate) : '—'}</span>
         </div>
         <div style="display: flex; flex-direction: column; justify-content: flex-start;">
-          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Logged Date</span>
+          <span style="font-size: 8.5px; text-transform: uppercase; font-weight: 700; color: #64748b; letter-spacing: 0.04em;">Created Date</span>
           <span style="font-size: 11.5px; font-weight: 700; color: #0f172a; margin-top: 2px;">${formatISTDate(task.created_at)}</span>
         </div>
         <div style="display: flex; flex-direction: column; justify-content: flex-start;">
@@ -231,7 +256,18 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
       resolvedCorrectiveActions.map((ca: any, idx: number) => {
         const isLatest = idx === resolvedCorrectiveActions.length - 1;
         const attemptPhotos = (ca.photos && ca.photos.length > 0) ? ca.photos : [];
-        const currentAttemptApprovalRemarks = ca.approver_remarks || (isLatest ? finalApprovalRemarks : null);
+        const currentAttemptApprovalRemarks = getGenuineRemark(
+          ca.approver_remarks,
+          isLatest ? finalApprovalRemarks : null,
+          task.observation?.solution_text
+        );
+        const rawUserRemarks = (ca.action_description || '').trim();
+        const hasDistinctUserRemarks = Boolean(
+          rawUserRemarks &&
+          !isBoilerplate(rawUserRemarks) &&
+          rawUserRemarks !== (currentAttemptApprovalRemarks || '').trim()
+        );
+
         return `
                   <div style="background: ${isLatest ? '#f0fdf4' : '#f8fafc'}; border: 1px solid ${isLatest ? '#86efac' : '#e2e8f0'}; border-radius: 6px; padding: 8px 10px; margin-bottom: 10px;">
                     <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; margin-bottom: 6px;">
@@ -241,10 +277,12 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
                       <span style="font-size: 9px; color: #64748b;">${formatISTDateTime(ca.submitted_at)}</span>
                     </div>
 
-                    <div style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 2px;">User Remarks:</div>
-                    <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 8px; font-size: 11px; color: #1e293b; line-height: 1.4; margin-bottom: 6px;">
-                      ${ca.action_description || 'No remarks provided.'}
-                    </div>
+                    ${hasDistinctUserRemarks ? `
+                      <div style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 2px;">User Remarks:</div>
+                      <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 6px 8px; font-size: 11px; color: #1e293b; line-height: 1.4; margin-bottom: 6px;">
+                        ${rawUserRemarks}
+                      </div>
+                    ` : ''}
 
                     <div style="font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 2px;">Submitted Photos (${attemptPhotos.length}):</div>
                     ${renderPhotoHtml(attemptPhotos, 'After', '#10b981')}
@@ -278,24 +316,37 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
                 `;
       }).join('')
     ) : `
-              <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">User Submission (Remarks)</div>
-              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #1e293b; line-height: 1.45; margin-bottom: 10px;">
-                ${solutionRemarks || 'Corrective action executed and verified by safety officer.'}
-              </div>
+              ${(() => {
+      const approverRemark = getGenuineRemark(finalApprovalRemarks, task.observation?.solution_text);
+      const rawUserRemark = (solutionRemarks || '').trim();
+      const hasDistinctUserRemarks = Boolean(
+        rawUserRemark &&
+        !isBoilerplate(rawUserRemark) &&
+        rawUserRemark !== (approverRemark || '').trim()
+      );
+      return `
+                  ${hasDistinctUserRemarks ? `
+                    <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">User Submission (Remarks)</div>
+                    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #1e293b; line-height: 1.45; margin-bottom: 10px;">
+                      ${rawUserRemark}
+                    </div>
+                  ` : ''}
 
-              <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Evidence Photos (${resolvedAfterPhotos.length})</div>
-              ${renderPhotoHtml(resolvedAfterPhotos, 'After', '#10b981')}
+                  <div style="font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; margin-bottom: 4px;">Evidence Photos (${resolvedAfterPhotos.length})</div>
+                  ${renderPhotoHtml(resolvedAfterPhotos, 'After', '#10b981')}
 
-              ${finalApprovalRemarks ? `
-                <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 8px 10px; margin-top: 8px;">
-                  <div style="font-size: 9px; font-weight: 700; color: #047857; text-transform: uppercase;">
-                    Safety Officer Verification Remarks:
-                  </div>
-                  <div style="font-size: 11px; color: #065f46; font-weight: 600; margin-top: 2px;">
-                    "${finalApprovalRemarks}"
-                  </div>
-                </div>
-              ` : ''}
+                  ${approverRemark ? `
+                    <div style="background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: 6px; padding: 8px 10px; margin-top: 8px;">
+                      <div style="font-size: 9px; font-weight: 700; color: #047857; text-transform: uppercase;">
+                        Safety Officer Verification Remarks:
+                      </div>
+                      <div style="font-size: 11px; color: #065f46; font-weight: 600; margin-top: 2px;">
+                        "${approverRemark}"
+                      </div>
+                    </div>
+                  ` : ''}
+                `;
+    })()}
             `}
           </div>
         </div>

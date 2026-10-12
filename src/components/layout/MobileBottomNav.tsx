@@ -39,7 +39,7 @@ export const MobileBottomNav: React.FC = () => {
           className={({ isActive }) => `mobile-nav-btn ${isActive ? 'active' : ''}`}
         >
           <CheckSquare size={20} />
-          <span>My Tasks</span>
+          <span>My Task</span>
         </NavLink>
       )}
 

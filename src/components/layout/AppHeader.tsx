@@ -122,8 +122,8 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ onToggleSidebar }) => {
                 </div>
                 <div style={{ fontWeight: 800, fontSize: '0.925rem', marginTop: '2px', color: 'var(--text-primary)' }}>{currentUser?.full_name}</div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                  {currentUser?.email || currentUser?.username}
-                  {currentUser?.emp_id ? ` • Emp ID: #${currentUser.emp_id}` : ''}
+                  {/* {currentUser?.email || currentUser?.username} */}
+                  {/* {currentUser?.emp_id ? ` • Emp ID: #${currentUser.emp_id}` : ''} */}
                 </div>
                 <div style={{ marginTop: '6px' }}>
                   <span className={`badge ${isOfficer ? 'badge-high' : 'badge-assigned'}`} style={{ fontSize: '0.65rem' }}>

@@ -28,11 +28,8 @@ export const MyTasksPage: React.FC = () => {
   // Loading state
   const [loading, setLoading] = useState(true);
 
-  // Tasks and counts
+  // Tasks
   const [tasks, setTasks] = useState<Task[]>([]);
-  const [allTasksCount, setAllTasksCount] = useState(0);
-  const [userAssignedCount, setUserAssignedCount] = useState(0);
-  const [verificationCount, setVerificationCount] = useState(0);
   const [departments, setDepartments] = useState<Department[]>([]);
 
   // Image Preview Modal state
@@ -43,9 +40,6 @@ export const MyTasksPage: React.FC = () => {
     badgeBg?: string;
     badgeColor?: string;
   } | null>(null);
-
-  // Officer scope: 'MINE' (Assigned to Me / Done by Me) | 'ALL' (All Plant Tasks) | 'VERIFICATION' (Pending Verification)
-  const [officerScope, setOfficerScope] = useState<'MINE' | 'ALL' | 'VERIFICATION'>('MINE');
 
   // Modals & Selection
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -154,47 +148,63 @@ export const MyTasksPage: React.FC = () => {
 
       setDepartments(depts);
 
-      // Filter tasks strictly for current user:
-      // 1. Assigned to current user (including tasks self-assigned by safety officer)
-      // 2. Done by current user (completed_by or submitted corrective action)
-      // 3. Or participant
+      // Filter tasks strictly for current user across all roles (Employee, Safety Officer, Admin):
+      // Shows only tasks assigned to the user or logged by the user
       const userOnlyTasks = all.filter((t) => {
-        const assignedToRaw = t.assigned_to ?? t.observation?.assigned_to ?? t.assignee?.emp_id;
+        // 1. Assignee check (tasks assigned to current user)
+        const assignedToRaw = t.assigned_to ?? t.observation?.assigned_to ?? t.assignee?.emp_id ?? (t.assignee as any)?.id;
         const assignedToNum = assignedToRaw !== undefined && assignedToRaw !== null && assignedToRaw !== '' ? Number(assignedToRaw) : null;
+        const assignedToStr = assignedToRaw !== undefined && assignedToRaw !== null ? String(assignedToRaw).trim() : '';
 
-        const completedByRaw = t.completed_by ?? t.observation?.completed_by ?? (t as any).completer?.emp_id;
-        const completedByNum = completedByRaw !== undefined && completedByRaw !== null && completedByRaw !== '' ? Number(completedByRaw) : null;
+        const isAssignedToMe = Boolean(
+          (currentEmpId && assignedToNum !== null && assignedToNum === currentEmpId) ||
+          (currentUser?.emp_id && assignedToStr === String(currentUser.emp_id).trim()) ||
+          (currentUser?.id && assignedToStr === String(currentUser.id).trim()) ||
+          (currentUser?.username && t.assignee?.username && t.assignee.username.toLowerCase() === currentUser.username.toLowerCase())
+        );
 
-        const submittedByMe = t.corrective_actions?.some((ca: any) => Number(ca.submitted_by) === currentEmpId);
-        const isParticipant = t.participants?.some((p) => Number(p.user_id) === currentEmpId);
+        // 2. Creator check (tasks logged / created by current user)
+        const creatorRaw = t.assigned_by ?? t.observation?.created_by ?? t.assigner?.emp_id ?? (t.assigner as any)?.id;
+        const creatorNum = creatorRaw !== undefined && creatorRaw !== null && creatorRaw !== '' ? Number(creatorRaw) : null;
+        const creatorStr = creatorRaw !== undefined && creatorRaw !== null ? String(creatorRaw).trim() : '';
 
-        const isAssignedToMe = Boolean(currentEmpId && assignedToNum !== null && assignedToNum === currentEmpId);
-        const isDoneByMe = Boolean(currentEmpId && ((completedByNum !== null && completedByNum === currentEmpId) || submittedByMe));
+        const isLoggedByMe = Boolean(
+          (currentEmpId && creatorNum !== null && creatorNum === currentEmpId) ||
+          (currentUser?.emp_id && creatorStr === String(currentUser.emp_id).trim()) ||
+          (currentUser?.id && creatorStr === String(currentUser.id).trim()) ||
+          (currentUser?.username && t.assigner?.username && t.assigner.username.toLowerCase() === currentUser.username.toLowerCase())
+        );
 
-        return isAssignedToMe || isDoneByMe || isParticipant;
+        // 3. Participant check
+        const isParticipant = Boolean(
+          t.participants?.some((p) => 
+            (currentEmpId && Number(p.user_id) === currentEmpId) ||
+            (currentUser?.emp_id && String(p.user_id).trim() === String(currentUser.emp_id).trim()) ||
+            (currentUser?.id && String(p.user_id).trim() === String(currentUser.id).trim())
+          )
+        );
+
+        // 4. Corrective work submitted by me
+        const submittedByMe = Boolean(
+          t.corrective_actions?.some((ca: any) => 
+            (currentEmpId && Number(ca.submitted_by) === currentEmpId) ||
+            (currentUser?.emp_id && String(ca.submitted_by).trim() === String(currentUser.emp_id).trim()) ||
+            (currentUser?.id && String(ca.submitted_by).trim() === String(currentUser.id).trim())
+          )
+        );
+
+        // Strictly exclude tasks solely approved by admin/officer:
+        // Do NOT match by t.completed_by because that records the verifier/approver,
+        // which previously caused all approved tasks in the organization to flood an admin's My Tasks list.
+        return isAssignedToMe || isLoggedByMe || isParticipant || submittedByMe;
       });
 
-      const verificationTasks = all.filter((t) => t.status === 'SUBMITTED_FOR_REVIEW');
-
-      setAllTasksCount(all.length);
-      setUserAssignedCount(userOnlyTasks.length);
-      setVerificationCount(verificationTasks.length);
-
-      // If role is employee, show only tasks assigned to them.
-      // If officer, show their assigned/done tasks ('MINE'), all plant tasks ('ALL'), or pending verification queue ('VERIFICATION').
-      let scopedTasks: Task[] = [];
-      if (isUserRole) {
-        scopedTasks = userOnlyTasks;
-      } else {
-        if (officerScope === 'MINE') scopedTasks = userOnlyTasks;
-        else if (officerScope === 'VERIFICATION') scopedTasks = verificationTasks;
-        else scopedTasks = all;
-      }
-      setTasks(scopedTasks);
+      // Show strictly only current user's assigned/self-assigned tasks
+      setTasks(userOnlyTasks);
 
       const paramTaskId = searchParams.get('taskId');
       if (paramTaskId) {
-        const match = scopedTasks.find((t) => t.id === paramTaskId || t.task_number === paramTaskId);
+        const match = userOnlyTasks.find((t) => t.id === paramTaskId || t.task_number === paramTaskId);
         if (match) setSelectedTask(match);
       }
     } catch (err) {
@@ -207,7 +217,7 @@ export const MyTasksPage: React.FC = () => {
   useEffect(() => {
     loadData();
     return subscribeToDataChanges(loadData);
-  }, [currentUser, searchParams, officerScope, isUserRole]);
+  }, [currentUser, searchParams]);
 
   const setFilter = (filter: string) => {
     setSearchParams({ filter });
@@ -262,10 +272,9 @@ export const MyTasksPage: React.FC = () => {
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <h2 style={{ fontSize: '1.4rem', fontWeight: 800 }}>
-              My Assigned Tasks
+              My Task
             </h2>
           </div>
-
         </div>
 
         {/* Top Actions: Add Task Button only for Safety Officer and Admin */}

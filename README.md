@@ -1,4 +1,4 @@
-# Health & Safety — Industrial Health & Safety (EHS) Management System
+# Health & Safety —  (EHS) Management System
 
 [![React](https://img.shields.io/badge/Frontend-React%2019%20%2B%20Vite%20%2B%20TypeScript-61dafb?logo=react)](https://react.dev/)
 [![Supabase](https://img.shields.io/badge/Backend-Supabase%20%2B%20PostgreSQL-3ecf8e?logo=supabase)](https://supabase.com/)

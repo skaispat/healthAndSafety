@@ -125,7 +125,7 @@ export const TrainingRecordsPage: React.FC = () => {
 
   return (
     <div className="page-wrapper" style={{ maxWidth: '1200px', margin: '0 auto', paddingBottom: '30px' }}>
-      
+
       {/* Compact Top Header */}
       <div
         style={{
@@ -340,14 +340,14 @@ export const TrainingRecordsPage: React.FC = () => {
             <table className="ehs-table">
               <thead>
                 <tr>
+                  <th style={{ width: '110px', textAlign: 'center' }}>Actions</th>
                   <th style={{ width: '160px' }}>Sr No</th>
                   <th style={{ width: '150px' }}>Department & Area</th>
                   <th>Topic</th>
-                  <th style={{ width: '110px' }}>Headcount</th>
+                  <th style={{ width: '110px' }}>Attendees</th>
                   <th style={{ width: '110px' }}>Date</th>
                   <th style={{ width: '140px' }}>Conducted By</th>
-                  <th style={{ width: '130px' }}>Photos</th>
-                  <th style={{ width: '110px', textAlign: 'center' }}>Actions</th>
+                  {/* <th style={{ width: '130px' }}>Photos</th> */}
                 </tr>
               </thead>
               <tbody>
@@ -361,6 +361,33 @@ export const TrainingRecordsPage: React.FC = () => {
                       onClick={() => setSelectedTraining(t)}
                       style={{ cursor: 'pointer' }}
                     >
+                      <td style={{ textAlign: 'center' }}>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
+                          <button
+                            className="btn-ghost"
+                            onClick={() => setSelectedTraining(t)}
+                            style={{ color: 'var(--brand-secondary)', padding: '5px' }}
+                            title="View Details"
+                          >
+                            <Eye size={16} />
+                          </button>
+
+                          <button
+                            className="btn-ghost"
+                            onClick={(e) => handleDownloadPDF(t, e)}
+                            disabled={exportingId === t.id}
+                            style={{ color: 'var(--brand-primary)', padding: '5px' }}
+                            title="Download PDF"
+                          >
+                            {exportingId === t.id ? (
+                              <Loader2 size={16} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
+                            ) : (
+                              <FileDown size={16} />
+                            )}
+                          </button>
+                        </div>
+                      </td>
+
                       <td>
                         <span style={{ fontWeight: 800, color: 'var(--brand-primary)', fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>
                           {t.training_number}
@@ -399,7 +426,7 @@ export const TrainingRecordsPage: React.FC = () => {
                         {t.conducted_by || 'Safety Officer'}
                       </td>
 
-                      <td>
+                      {/* <td>
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', fontSize: '0.7rem' }}>
                           {attendancePhotos.length > 0 && (
                             <span style={{ color: 'var(--brand-secondary)', display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
@@ -412,34 +439,9 @@ export const TrainingRecordsPage: React.FC = () => {
                             </span>
                           )}
                         </div>
-                      </td>
+                      </td> */}
 
-                      <td style={{ textAlign: 'center' }}>
-                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }} onClick={(e) => e.stopPropagation()}>
-                          <button
-                            className="btn-ghost"
-                            onClick={() => setSelectedTraining(t)}
-                            style={{ color: 'var(--brand-secondary)', padding: '5px' }}
-                            title="View Details"
-                          >
-                            <Eye size={16} />
-                          </button>
 
-                          <button
-                            className="btn-ghost"
-                            onClick={(e) => handleDownloadPDF(t, e)}
-                            disabled={exportingId === t.id}
-                            style={{ color: 'var(--brand-primary)', padding: '5px' }}
-                            title="Download PDF"
-                          >
-                            {exportingId === t.id ? (
-                              <Loader2 size={16} className="spinner" style={{ animation: 'spin 1s linear infinite' }} />
-                            ) : (
-                              <FileDown size={16} />
-                            )}
-                          </button>
-                        </div>
-                      </td>
                     </tr>
                   );
                 })}

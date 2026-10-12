@@ -23,8 +23,8 @@ const urlToBase64 = async (url: string): Promise<string> => {
 export const exportTrainingReportPDF = async (training: TrainingRecord): Promise<void> => {
   const rawDept = (training.dept_name || training.department?.name || 'Department').trim();
   const isOther = (training.department?.name && training.department.name.trim().toUpperCase() === 'OTHER') ||
-                  (training.department?.dept_name && training.department.dept_name.trim().toUpperCase() === 'OTHER') ||
-                  String(training.dept_id) === '14';
+    (training.department?.dept_name && training.department.dept_name.trim().toUpperCase() === 'OTHER') ||
+    String(training.dept_id) === '14';
 
   let deptName = rawDept;
   if (isOther && rawDept) {
@@ -105,10 +105,9 @@ export const exportTrainingReportPDF = async (training: TrainingRecord): Promise
         <!-- Attendance Photo(s) with clean margin from header -->
         <div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
           ${resolvedAttendancePhotos
-            .map(
-              (p, idx) => `
-            <div style="border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #f8fafc; box-shadow: 0 2px 8px rgba(0,0,0,0.06); max-width: ${
-              resolvedAttendancePhotos.length === 1 ? '540px' : '360px'
+        .map(
+          (p, idx) => `
+            <div style="border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #f8fafc; box-shadow: 0 2px 8px rgba(0,0,0,0.06); max-width: ${resolvedAttendancePhotos.length === 1 ? '540px' : '360px'
             }; width: 100%;">
               <img src="${p.url}" alt="Attendance Sheet #${idx + 1}" style="width: 100%; height: 260px; object-fit: contain; display: block; background: #f8fafc;" />
               <div style="background: #f1f5f9; padding: 6px 10px; font-size: 11px; font-weight: 700; color: #334155; text-align: center; border-top: 1px solid #e2e8f0;">
@@ -116,8 +115,8 @@ export const exportTrainingReportPDF = async (training: TrainingRecord): Promise
               </div>
             </div>
           `
-            )
-            .join('')}
+        )
+        .join('')}
         </div>
       </div>
     `;
@@ -131,7 +130,7 @@ export const exportTrainingReportPDF = async (training: TrainingRecord): Promise
         <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 3.5px solid #b91c1c; padding-bottom: 14px; margin-bottom: 16px;">
           <div>
             <div style="font-size: 24px; font-weight: 900; color: #b91c1c; letter-spacing: -0.02em;">
-              SKA ISPAT — INDUSTRIAL HEALTH & SAFETY
+              SKA ISPAT — ENVIRONMENTAL HEALTH & SAFETY
             </div>
             <div style="font-size: 13px; color: #334155; text-transform: uppercase; font-weight: 800; letter-spacing: 0.06em; margin-top: 3px;">
               Safety & Training Record
@@ -231,7 +230,7 @@ export const exportTrainingReportPDF = async (training: TrainingRecord): Promise
           <div style="display: flex; align-items: center; justify-content: space-between; border-bottom: 3.5px solid #b91c1c; padding-bottom: 14px; margin-bottom: 16px;">
             <div>
               <div style="font-size: 24px; font-weight: 900; color: #b91c1c; letter-spacing: -0.02em;">
-                SKA ISPAT — INDUSTRIAL HEALTH & SAFETY
+                SKA ISPAT — ENVIRONMENTAL HEALTH & SAFETY
               </div>
               <div style="font-size: 13px; color: #334155; text-transform: uppercase; font-weight: 800; letter-spacing: 0.06em; margin-top: 3px;">
                 Training Photo Documentation & Evidence
@@ -273,12 +272,11 @@ export const exportTrainingReportPDF = async (training: TrainingRecord): Promise
           <!-- Large High-Resolution Photos Grid with clean margin -->
           <div style="display: grid; grid-template-columns: ${isSinglePhoto ? '1fr' : 'repeat(2, 1fr)'}; gap: 16px; margin-top: 6px;">
             ${photos
-              .map(
-                (p, idx) => `
+        .map(
+          (p, idx) => `
               <div style="position: relative; border: 1.5px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #0f172a; box-shadow: 0 3px 10px rgba(0,0,0,0.1);">
-                <img src="${p.url}" alt="Training Photo" style="width: 100%; height: ${
-                  isSinglePhoto ? '360px' : photos.length <= 2 ? '300px' : '260px'
-                }; object-fit: cover; display: block;" />
+                <img src="${p.url}" alt="Training Photo" style="width: 100%; height: ${isSinglePhoto ? '360px' : photos.length <= 2 ? '300px' : '260px'
+            }; object-fit: cover; display: block;" />
                 <div style="position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(to top, rgba(15,23,42,0.85), transparent); padding: 8px 12px; display: flex; align-items: center; justify-content: space-between;">
                   <span style="color: #ffffff; font-size: 12px; font-weight: 800; letter-spacing: 0.04em;">
                     Training Photo #${pageIndex * 4 + idx + 1}
@@ -289,8 +287,8 @@ export const exportTrainingReportPDF = async (training: TrainingRecord): Promise
                 </div>
               </div>
             `
-              )
-              .join('')}
+        )
+        .join('')}
           </div>
         </div>
 
@@ -388,8 +386,8 @@ export const exportTrainingReportPDF = async (training: TrainingRecord): Promise
           </head>
           <body>
             ${allPageHtmls
-              .map((h) => `<div class="page-container">${h}</div>`)
-              .join('')}
+          .map((h) => `<div class="page-container">${h}</div>`)
+          .join('')}
           </body>
         </html>
       `);
