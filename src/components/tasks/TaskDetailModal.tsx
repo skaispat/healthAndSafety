@@ -144,9 +144,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const areaName = obs?.area || loadedObs?.area || (task as any).area || '';
   const priority = obs?.priority || loadedObs?.priority || (task as any).priority;
   const problemText = obs?.observation_text || loadedObs?.observation_text || (task as any).observation_text || '';
-  const solutionText = obs?.solution_text || loadedObs?.solution_text || (task as any).solution_text || '';
-  const assignerEmpId = creatorEmpId || Number(task.assigned_by || obs?.created_by || loadedObs?.created_by);
-
+  const rawRecommendedAction = obs?.recommended_action || obs?.solution_text || loadedObs?.recommended_action || loadedObs?.solution_text || (task as any).recommended_action || (task as any).solution_text || '';
   const isGenericBoilerplate = (text?: string | null): boolean => {
     if (!text) return true;
     const t = text.trim();
@@ -157,9 +155,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
       t.startsWith('Corrective action executed and verified') ||
       t.startsWith('Safety observation logged and task assigned') ||
       t.startsWith('Task logged by') ||
+      t.startsWith('Work inspected on site and verified completed') ||
+      t === 'Verified and completed.' ||
+      t === 'Verified and approved.' ||
       t === 'No remarks provided.'
     );
   };
+  const recommendedAction = (!isGenericBoilerplate(rawRecommendedAction)) ? rawRecommendedAction : '';
+  const solutionText = recommendedAction;
+  const assignerEmpId = creatorEmpId || Number(task.assigned_by || obs?.created_by || loadedObs?.created_by);
 
   const getGenuineRemark = (...candidates: (string | null | undefined)[]): string | null => {
     for (const c of candidates) {
@@ -173,9 +177,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
   const finalApprovalRemarks = getGenuineRemark(
     task.approval_remarks,
     correctiveActions && correctiveActions.length > 0 ? correctiveActions[correctiveActions.length - 1].approver_remarks : null,
-    obs?.approval_remarks,
-    obs?.solution_text,
-    solutionText
+    obs?.approval_remarks
   );
   const approverName = task.completer?.full_name ||
     (correctiveActions && correctiveActions.length > 0 ? correctiveActions[correctiveActions.length - 1].approver?.full_name : null) ||
@@ -620,13 +622,13 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </div>
                   </div>
 
-                  {solutionText && (
+                  {recommendedAction && (
                     <div>
                       <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', marginBottom: '4px' }}>
-                        Proposed Solution
+                        Recommended Action
                       </div>
                       <div style={{ background: '#f8fafc', border: '1px solid var(--border-subtle)', borderRadius: '6px', padding: '10px 12px', fontSize: '0.88rem', color: 'var(--text-primary)', lineHeight: 1.45 }}>
-                        {solutionText}
+                        {recommendedAction}
                       </div>
                     </div>
                   )}
@@ -715,8 +717,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
 
                       const approverRemark = getGenuineRemark(
                         ca.approver_remarks,
-                        isLatest ? finalApprovalRemarks : null,
-                        obs?.solution_text
+                        isLatest ? finalApprovalRemarks : null
                       );
                       const rawUserRemark = (ca.action_description || '').trim();
                       const hasDistinctUserRemark = Boolean(
@@ -838,7 +839,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                   ) : (
                     <div>
                       {(() => {
-                        const approverRemark = getGenuineRemark(finalApprovalRemarks, obs?.solution_text);
+                        const approverRemark = getGenuineRemark(finalApprovalRemarks);
                         const rawUserRemark = (latestAction?.action_description || solutionRemarks || '').trim();
                         const hasDistinctUserRemark = Boolean(
                           rawUserRemark &&
@@ -971,15 +972,15 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
               </div>
             </div>
 
-            {/* Solution Statement */}
-            {solutionText && (
+            {/* Recommended Action */}
+            {recommendedAction && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
                 <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem', margin: 0, color: 'var(--text-secondary)' }}>
-                  Solution Statement
+                  Recommended Action
                 </label>
                 <div style={{ background: '#f8fafc', padding: '10px 12px', borderRadius: '6px', border: '1px solid var(--border-subtle)' }}>
                   <p style={{ fontSize: '0.9rem', color: 'var(--text-primary)', margin: 0, lineHeight: 1.5 }}>
-                    {solutionText}
+                    {recommendedAction}
                   </p>
                 </div>
               </div>
@@ -1095,7 +1096,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                           </div>
                         )}
 
-                        {ca.approver_remarks && (
+                        {ca.approver_remarks && isApproved && (
                           <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: '4px', padding: '8px 10px', marginTop: '4px' }}>
                             <span style={{ fontSize: '0.7rem', fontWeight: 700, color: '#047857', textTransform: 'uppercase' }}>
                               Safety Officer Remarks:

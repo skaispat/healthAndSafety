@@ -368,14 +368,14 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
                 >
                   {currentUser && (
                     <option value={currentUser.emp_id}>
-                      {(!currentUser.full_name || currentUser.full_name.toLowerCase() === 'admin' ? 'Safety Officer' : currentUser.full_name)} — Emp ID: {currentUser.emp_id} (Assign to Myself)
+                      {(!currentUser.full_name || currentUser.full_name.toLowerCase() === 'admin' ? 'Safety Officer' : currentUser.full_name)} (Assign to Myself)
                     </option>
                   )}
                   {filteredEmployees
                     .filter((emp) => String(emp.emp_id) !== String(currentUser?.emp_id))
                     .map((emp) => (
                       <option key={emp.emp_id} value={emp.emp_id}>
-                        {emp.full_name} — Emp ID: {emp.emp_id} {emp.position ? `(${emp.position})` : ''}
+                        {emp.full_name}
                       </option>
                     ))}
                 </select>
@@ -424,7 +424,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <ShieldCheck size={16} color="var(--brand-primary)" />
               <span>
-                Assigner: <strong style={{ color: 'var(--text-primary)' }}>{(!currentUser?.full_name || currentUser.full_name.toLowerCase() === 'admin') ? 'Safety Officer' : currentUser.full_name}</strong> (Emp ID: {currentUser?.emp_id || currentUser?.id || 'N/A'})
+                Assigner: <strong style={{ color: 'var(--text-primary)' }}>{(!currentUser?.full_name || currentUser.full_name.toLowerCase() === 'admin') ? 'Safety Officer' : currentUser.full_name}</strong>
               </span>
             </div>
 

@@ -96,6 +96,7 @@ export interface Observation {
   area: string;
   observation_text: string;
   solution_text?: string | null;
+  recommended_action?: string | null;
   priority: PriorityLevel;
   risk_min: number;
   risk_max: number;
@@ -229,6 +230,8 @@ export interface Task {
   completed_by?: number | string | null;
   rework_reason?: string | null;
   approval_remarks?: string | null;
+  solution_text?: string | null;
+  recommended_action?: string | null;
 
   // Relations
   observation?: Observation;

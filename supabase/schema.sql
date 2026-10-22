@@ -251,3 +251,5 @@ DROP POLICY IF EXISTS "Observation messages allow all" ON public.observation_mes
 CREATE POLICY "Observation messages allow all" ON public.observation_messages FOR ALL USING (TRUE) WITH CHECK (TRUE);
 CREATE POLICY "Officer self tasks allow all" ON public.officer_self_tasks FOR ALL USING (TRUE) WITH CHECK (TRUE);
 
+-- Ensure recommended_action column is present in observations
+ALTER TABLE public.observations ADD COLUMN IF NOT EXISTS recommended_action TEXT;

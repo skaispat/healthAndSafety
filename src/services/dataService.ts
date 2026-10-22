@@ -362,7 +362,7 @@ export const DataService = {
     const depts = await this.getDepartments();
     const users = await this.getUsers();
 
-    // Fetch all observation history records for loop tracking
+    // Fetch all observation history records for loop tracking (excluding initial assignment rows)
     let allHistory: ObservationHistoryItem[] = [];
     let historySuccess = false;
     if (isSupabaseConfigured() && supabase) {
@@ -370,18 +370,26 @@ export const DataService = {
         const { data, error } = await supabase
           .from('observation_history')
           .select('*')
+          .neq('action_type', 'ASSIGNED')
           .order('created_at', { ascending: true });
         if (!error && Array.isArray(data)) {
           allHistory = data;
           historySuccess = true;
           setStored(STORAGE_KEYS.OBSERVATION_HISTORY, data, false);
         }
+        // Clean up legacy initial assignment entries from database so table strictly contains actual updates
+        try {
+          await supabase.from('observation_history').delete().eq('action_type', 'ASSIGNED');
+        } catch (delErr) {
+          // ignore
+        }
       } catch (err) {
         console.warn('Supabase fetch observation_history error:', err);
       }
     }
     if (!historySuccess) {
-      allHistory = getStored<ObservationHistoryItem[]>(STORAGE_KEYS.OBSERVATION_HISTORY, []);
+      allHistory = getStored<ObservationHistoryItem[]>(STORAGE_KEYS.OBSERVATION_HISTORY, [])
+        .filter(h => h.action_type !== 'ASSIGNED');
     }
 
     return rawObs.map((obs: any, index: number) => {
@@ -424,9 +432,9 @@ export const DataService = {
         p => p.photo_type === 'CORRECTIVE' || (p.uploaded_by && Number(p.uploaded_by) !== createdByNum)
       );
 
-      // Find history events for this specific observation
+      // Find history events for this specific observation (strictly actual updates, submissions, reworks)
       const obsHistory = allHistory
-        .filter(h => String(h.observation_id) === String(obs.id))
+        .filter(h => String(h.observation_id) === String(obs.id) && h.action_type !== 'ASSIGNED')
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
       // Reconstruct all progress updates, attempts, and submissions:
@@ -493,18 +501,21 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
             }
           }
 
-          // Resolve genuine approver remarks (only for final verification/completion, not intermediate progress updates)
+          // Resolve genuine approver remarks (only for attempts that are actually verified & approved)
           let resolvedApproverRemarks: string | null = null;
-          if (!isPartialUpdate) {
+          const isAttemptApproved = Boolean(
+            approvalEvent ||
+            isDirectCompletion ||
+            (obs.status === 'COMPLETED' && sIdx === submissionEvents.length - 1)
+          );
+          if (!isPartialUpdate && isAttemptApproved) {
             if (approvalEvent && !isBoilerplateRemark(approvalEvent.description)) {
               resolvedApproverRemarks = approvalEvent.description.trim();
             } else if (sub.action_type === 'COMPLETED' && !isBoilerplateRemark(sub.description)) {
               resolvedApproverRemarks = sub.description.trim();
-            } else if (obs.solution_text && !isBoilerplateRemark(obs.solution_text)) {
-              resolvedApproverRemarks = obs.solution_text.trim();
             } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
               resolvedApproverRemarks = obs.approval_remarks.trim();
-            } else if (approvalEvent || isDirectCompletion || (obs.status === 'COMPLETED' && sIdx === submissionEvents.length - 1)) {
+            } else {
               resolvedApproverRemarks = 'Verified and approved.';
             }
           }
@@ -552,18 +563,18 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
             status: recordStatus,
           };
         });
-      } else if (obs.corrective_action || obs.solution_text || obs.status === 'COMPLETED') {
-        // Fallback for legacy observation records without history table entry
+      } else if (obs.status === 'COMPLETED' || obs.status === 'SUBMITTED_FOR_REVIEW' || obs.status === 'REWORK_REQUIRED' || (obs.corrective_action && obs.status !== 'ASSIGNED' && obs.status !== 'OPEN')) {
+        // Fallback ONLY for legacy observation records that have actually been submitted, reworked, or completed without history table entry
         const fallbackApproval = [...obsHistory].reverse().find(h => h.action_type === 'COMPLETED');
         let legacyApproverRemarks: string | null = null;
-        if (fallbackApproval && !isBoilerplateRemark(fallbackApproval.description)) {
-          legacyApproverRemarks = fallbackApproval.description.trim();
-        } else if (obs.solution_text && !isBoilerplateRemark(obs.solution_text)) {
-          legacyApproverRemarks = obs.solution_text.trim();
-        } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
-          legacyApproverRemarks = obs.approval_remarks.trim();
-        } else if (obs.status === 'COMPLETED') {
-          legacyApproverRemarks = 'Verified and approved.';
+        if (obs.status === 'COMPLETED') {
+          if (fallbackApproval && !isBoilerplateRemark(fallbackApproval.description)) {
+            legacyApproverRemarks = fallbackApproval.description.trim();
+          } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
+            legacyApproverRemarks = obs.approval_remarks.trim();
+          } else {
+            legacyApproverRemarks = 'Verified and approved.';
+          }
         }
 
         let legacyUserRemarks: string | null = null;
@@ -585,9 +596,9 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
           photos: correctivePhotos,
           rework_reason: obs.rework_reason,
           approver_remarks: legacyApproverRemarks,
-          approved_at: fallbackApproval ? fallbackApproval.created_at : obs.completed_at,
-          approved_by: fallbackApproval ? fallbackApproval.performed_by : obs.completed_by,
-          approver: users.find(u => u.emp_id === Number(fallbackApproval?.performed_by || obs.completed_by)),
+          approved_at: fallbackApproval ? fallbackApproval.created_at : (obs.status === 'COMPLETED' ? obs.completed_at : null),
+          approved_by: fallbackApproval ? fallbackApproval.performed_by : (obs.status === 'COMPLETED' ? obs.completed_by : null),
+          approver: (obs.status === 'COMPLETED') ? users.find(u => u.emp_id === Number(fallbackApproval?.performed_by || obs.completed_by)) : null,
           status: obs.status === 'REWORK_REQUIRED' ? 'REWORK_REQUIRED' : (obs.status === 'COMPLETED' ? 'APPROVED' : 'SUBMITTED'),
         }];
       }
@@ -608,19 +619,21 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
         performer: users.find(u => u.emp_id === Number(h.performed_by)),
       }));
 
-      // Find overall latest approval event and remarks
+      // Find overall latest approval event and remarks (only when task is actually completed)
       const latestApprovalEvent = [...obsHistory].reverse().find(h => h.action_type === 'COMPLETED');
       let latestApprovalRemarks: string | null = null;
-      if (latestApprovalEvent && !isBoilerplateRemark(latestApprovalEvent.description)) {
-        latestApprovalRemarks = latestApprovalEvent.description.trim();
-      } else if (obs.solution_text && !isBoilerplateRemark(obs.solution_text)) {
-        latestApprovalRemarks = obs.solution_text.trim();
-      } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
-        latestApprovalRemarks = obs.approval_remarks.trim();
-      } else if (obs.status === 'COMPLETED') {
-        latestApprovalRemarks = 'Verified and approved.';
+      if (obs.status === 'COMPLETED') {
+        if (latestApprovalEvent && !isBoilerplateRemark(latestApprovalEvent.description)) {
+          latestApprovalRemarks = latestApprovalEvent.description.trim();
+        } else if (obs.approval_remarks && !isBoilerplateRemark(obs.approval_remarks)) {
+          latestApprovalRemarks = obs.approval_remarks.trim();
+        } else {
+          latestApprovalRemarks = 'Verified and approved.';
+        }
       }
-      const completerUser = users.find(u => u.emp_id === Number(obs.completed_by || latestApprovalEvent?.performed_by));
+      const completerUser = (obs.status === 'COMPLETED')
+        ? users.find(u => u.emp_id === Number(obs.completed_by || latestApprovalEvent?.performed_by))
+        : undefined;
 
       // Safe observation number with robust fallback
       const resolvedObsNumber = obs.observation_number || `SKAEHS/2026-27/OB-${String(rawObs.length - index).padStart(2, '0')}`;
@@ -640,6 +653,8 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
         completed_by: obs.completed_by,
         rework_reason: obs.rework_reason,
         approval_remarks: latestApprovalRemarks,
+        solution_text: (obs as any).recommended_action || obs.solution_text || null,
+        recommended_action: (obs as any).recommended_action || obs.solution_text || null,
         assignee,
         assigner: creator,
         completer: completerUser,
@@ -659,7 +674,8 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
         department_id: String(deptIdNum),
         area: obs.area,
         observation_text: obs.observation_text,
-        solution_text: obs.solution_text,
+        solution_text: (obs as any).recommended_action || obs.solution_text || null,
+        recommended_action: (obs as any).recommended_action || obs.solution_text || null,
         priority: obs.priority,
         risk_min: Number(obs.risk_min),
         risk_max: Number(obs.risk_max),
@@ -707,6 +723,7 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
           .from('observation_history')
           .select('*')
           .eq('observation_id', observation_id)
+          .neq('action_type', 'ASSIGNED')
           .order('created_at', { ascending: true });
         if (!error && Array.isArray(data)) {
           return data;
@@ -717,7 +734,7 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
     }
     const stored = getStored<ObservationHistoryItem[]>(STORAGE_KEYS.OBSERVATION_HISTORY, []);
     return stored
-      .filter(h => String(h.observation_id) === String(observation_id))
+      .filter(h => String(h.observation_id) === String(observation_id) && h.action_type !== 'ASSIGNED')
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
   },
 
@@ -752,6 +769,7 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
     area: string;
     observation_text: string;
     solution_text?: string;
+    recommended_action?: string;
     assigned_to: string | number; // selected employee's emp_id
     due_date: string;
     priority: PriorityLevel;
@@ -844,13 +862,14 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
     const initialPhotos = photos.filter(p => p.photo_type === 'INITIAL');
     const correctivePhotos = photos.filter(p => p.photo_type === 'CORRECTIVE');
 
-    const resolvedAdminRemark = (params.solution_text || params.corrective_action || '').trim();
+    const initialRecommendedAction = (params.recommended_action || params.solution_text || '').trim();
+    const resolvedAdminRemark = (params.corrective_action || initialRecommendedAction || '').trim();
 
     const correctiveActionsList = (params.corrective_action || correctivePhotos.length > 0 || isCompleted) ? [{
       id: crypto.randomUUID(),
       task_id: obsId,
       attempt_number: 1,
-      description: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : 'Corrective work in progress')),
+      description: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (initialRecommendedAction || 'Submitted for verification') : 'Corrective work in progress')),
       approver_remarks: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : null,
       photos: correctivePhotos,
       submitted_by: createdByNum,
@@ -867,14 +886,15 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
       department_id: String(deptIdNum),
       area: params.area,
       observation_text: params.observation_text,
-      solution_text: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : (params.solution_text || null),
+      solution_text: initialRecommendedAction || null,
+      recommended_action: initialRecommendedAction || null,
       priority: params.priority,
       risk_min: risk.min,
       risk_max: risk.max,
       assigned_to: assignedToNum,
       due_date: params.due_date,
       status: targetStatus,
-      corrective_action: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
+      corrective_action: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (initialRecommendedAction || 'Submitted for verification') : null)),
       completed_by: isCompleted ? createdByNum : null,
       completed_at: isCompleted ? now : null,
       closed_by: isCompleted ? createdByNum : null,
@@ -907,6 +927,8 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
       completed_by: isCompleted ? createdByNum : undefined,
       completed_at: isCompleted ? now : undefined,
       approval_remarks: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : null,
+      solution_text: initialRecommendedAction || null,
+      recommended_action: initialRecommendedAction || null,
       assignee,
       assigner: creator,
       completer: isCompleted ? creator : undefined,
@@ -980,27 +1002,29 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
     // Supabase push directly into unified tables
     if (isSupabaseConfigured() && supabase) {
       try {
-        const { error: obsInsertErr } = await supabase.from('observations').insert([{
+        const obsPayload: any = {
           id: obsId,
           observation_number: obsNumber,
           created_by: createdByNum,
           dept_id: deptIdNum,
           area: params.area,
           observation_text: params.observation_text,
-          solution_text: isCompleted ? (resolvedAdminRemark || 'Verified and completed.') : (params.solution_text || null),
+          solution_text: initialRecommendedAction || null,
           priority: params.priority,
           risk_min: risk.min,
           risk_max: risk.max,
           assigned_to: assignedToNum,
           due_date: params.due_date,
           status: targetStatus,
-          corrective_action: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (params.solution_text || 'Submitted for verification') : null)),
+          corrective_action: isCompleted ? null : (params.corrective_action || (isSubmittedForReview ? (initialRecommendedAction || 'Submitted for verification') : null)),
           completed_by: isCompleted ? createdByNum : null,
           completed_at: isCompleted ? now : null,
           closed_by: isCompleted ? createdByNum : null,
           closed_at: isCompleted ? now : null,
           is_personal: false
-        }]);
+        };
+
+        const { error: obsInsertErr } = await supabase.from('observations').insert([obsPayload]);
 
         if (obsInsertErr) {
           console.error('Supabase insert observation error:', obsInsertErr);
@@ -1036,33 +1060,46 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
       }
     }
 
-    // Record history event
-    const initialHistoryItem: ObservationHistoryItem = {
-      id: crypto.randomUUID(),
-      observation_id: obsId,
-      action_type: isCompleted ? 'COMPLETED' : (isSubmittedForReview ? 'SUBMITTED_FOR_REVIEW' : 'ASSIGNED'),
-      attempt_number: 1,
-      description: isCompleted
-        ? (resolvedAdminRemark || 'Verified and completed.')
-        : (isSubmittedForReview
-          ? (params.solution_text || `Task logged by ${creator?.full_name || 'employee'} and submitted for verification.`)
-          : `Safety observation logged and task assigned to ${assignee?.full_name || 'employee'} (Emp ID: ${assignedToNum}).`),
-      rework_reason: null,
-      performed_by: createdByNum,
-      previous_status: null,
-      new_status: targetStatus,
-      photos: params.photo_urls,
-      created_at: now
-    };
-    await this.recordObservationHistory(initialHistoryItem);
-
-    if (targetStatus === 'IN_PROGRESS' && (params.corrective_action || correctivePhotos.length > 0)) {
+    // When an observation is created for the first time, do NOT insert into observation_history table.
+    // It is stored purely in the observations table.
+    // History entries will only be recorded when an actual update, rework, or completion occurs.
+    if (isCompleted) {
+      const completionHistoryItem: ObservationHistoryItem = {
+        id: crypto.randomUUID(),
+        observation_id: obsId,
+        action_type: 'COMPLETED',
+        attempt_number: 1,
+        description: resolvedAdminRemark || params.observation_text || 'Verified and completed.',
+        rework_reason: null,
+        performed_by: createdByNum,
+        previous_status: null,
+        new_status: targetStatus,
+        photos: params.photo_urls,
+        created_at: now
+      };
+      await this.recordObservationHistory(completionHistoryItem);
+    } else if (isSubmittedForReview) {
+      const reviewHistoryItem: ObservationHistoryItem = {
+        id: crypto.randomUUID(),
+        observation_id: obsId,
+        action_type: 'SUBMITTED_FOR_REVIEW',
+        attempt_number: 1,
+        description: params.observation_text || 'Submitted for verification',
+        rework_reason: null,
+        performed_by: createdByNum,
+        previous_status: null,
+        new_status: targetStatus,
+        photos: params.photo_urls,
+        created_at: now
+      };
+      await this.recordObservationHistory(reviewHistoryItem);
+    } else if (targetStatus === 'IN_PROGRESS' && (params.corrective_action || correctivePhotos.length > 0)) {
       const initialProgressHistoryItem: ObservationHistoryItem = {
         id: crypto.randomUUID(),
         observation_id: obsId,
         action_type: 'IN_PROGRESS',
         attempt_number: 1,
-        description: params.corrective_action || 'Saved as Active task with initial progress',
+        description: params.corrective_action || params.observation_text || 'Initial progress update',
         rework_reason: null,
         performed_by: createdByNum,
         previous_status: null,
@@ -1467,7 +1504,6 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
         await supabase.from('observations').update({
           status: newStatus,
           rework_reason: params.decision === 'REWORK' ? params.rework_reason : null,
-          solution_text: params.decision === 'COMPLETE' ? enteredApprovalRemarks : obs.solution_text,
           completed_at: params.decision === 'COMPLETE' ? now : null,
           completed_by: params.decision === 'COMPLETE' ? officerEmpId : null,
           closed_at: params.decision === 'COMPLETE' ? now : null,
@@ -1501,7 +1537,6 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
         obsList[idx].closed_at = now;
         obsList[idx].closed_by = officerEmpId;
         obsList[idx].rework_reason = null;
-        obsList[idx].solution_text = enteredApprovalRemarks;
         obsList[idx].approval_remarks = enteredApprovalRemarks;
       } else {
         obsList[idx].rework_reason = params.rework_reason;

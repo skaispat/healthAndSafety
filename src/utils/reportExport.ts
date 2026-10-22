@@ -95,8 +95,7 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
     correctiveActions && correctiveActions.length > 0
       ? correctiveActions[correctiveActions.length - 1].approver_remarks
       : null,
-    task.observation?.approval_remarks,
-    task.observation?.solution_text
+    task.observation?.approval_remarks
   );
 
   const resolvedApproverName = approverName ||
@@ -258,8 +257,7 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
         const attemptPhotos = (ca.photos && ca.photos.length > 0) ? ca.photos : [];
         const currentAttemptApprovalRemarks = getGenuineRemark(
           ca.approver_remarks,
-          isLatest ? finalApprovalRemarks : null,
-          task.observation?.solution_text
+          isLatest ? finalApprovalRemarks : null
         );
         const rawUserRemarks = (ca.action_description || '').trim();
         const hasDistinctUserRemarks = Boolean(
@@ -317,7 +315,7 @@ export const exportTaskReportPDF = async (params: ExportTaskReportParams): Promi
       }).join('')
     ) : `
               ${(() => {
-      const approverRemark = getGenuineRemark(finalApprovalRemarks, task.observation?.solution_text);
+      const approverRemark = getGenuineRemark(finalApprovalRemarks);
       const rawUserRemark = (solutionRemarks || '').trim();
       const hasDistinctUserRemarks = Boolean(
         rawUserRemark &&

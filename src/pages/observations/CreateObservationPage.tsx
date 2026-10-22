@@ -377,7 +377,7 @@ export const CreateObservationPage: React.FC = () => {
                   ) : (
                     filteredEmployees.map((emp) => (
                       <option key={emp.emp_id} value={emp.emp_id}>
-                        {emp.full_name} — Emp ID: {emp.emp_id} {emp.position ? `(${emp.position})` : ''}
+                        {emp.full_name}
                       </option>
                     ))
                   )}
@@ -447,7 +447,7 @@ export const CreateObservationPage: React.FC = () => {
               </div>
               <div>
                 <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-primary)' }}>
-                  Assigner: {(!currentUser?.full_name || currentUser.full_name.toLowerCase() === 'admin') ? 'Safety Officer' : currentUser.full_name} (Emp ID: {currentUser?.emp_id || currentUser?.id || 'N/A'})
+                  Assigner: {(!currentUser?.full_name || currentUser.full_name.toLowerCase() === 'admin') ? 'Safety Officer' : currentUser.full_name}
                 </div>
                 <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
                   Role: Safety Officer • Dept: {(typeof currentUser?.department === 'object' ? currentUser.department?.name : currentUser?.department) || currentUser?.department_name || 'Health & Safety'}
