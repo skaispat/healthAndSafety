@@ -1,8 +1,8 @@
-// Supabase Edge Function: safety-fine-whatsapp
-// Sends the WhatsApp template "safety_fine" to the fined employee.
+// Supabase Edge Function (deployed slug: safety_fine)
+// Sends the WhatsApp safety fine template to the fined employee.
 //
 // Invoked from the app right after a row is inserted into public.safety_fines:
-//   supabase.functions.invoke('safety-fine-whatsapp', { body: { fine_id } })
+//   supabase.functions.invoke('safety_fine', { body: { fine_id } })
 //
 // Security: the caller only sends a fine_id. Name, department, amount, reason,
 // picture and phone number are all read from the database with the service role,
@@ -10,15 +10,15 @@
 // Only fines created within the last FRESH_WINDOW_MINUTES can trigger a message,
 // which prevents replaying old fine IDs to spam employees.
 //
-// Template "safety_fine" (language: en)
+// Template "safety_fine_notice" (category: UTILITY, language: en)
 //   HEADER: IMAGE  -> fine picture
 //   BODY:
-//     Safety Rule Break!!
-//     Name  :  {{1}}
-//     Department   : {{2}}
-//     Fine Amount : {{3}}
-//     Reason : {{4}}.
-//     You have break the safety rule.
+//     Safety Penalty Notice
+//     Dear {{1}}, a safety fine has been recorded against you.
+//     Department: {{2}}
+//     Fine Amount: {{3}}
+//     Reason: {{4}}
+//     Please follow all plant safety rules. For any query, contact the Health and Safety department.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.38.4"
 
@@ -27,8 +27,11 @@ const WHATSAPP_ENDPOINT = Deno.env.get("WHATSAPP_ENDPOINT")
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")
 
-const TEMPLATE_NAME = "safety_fine"
-const TEMPLATE_LANGUAGE = "en"
+// Override via secrets without redeploying code changes:
+//   SAFETY_FINE_TEMPLATE (default "safety_fine_notice"), SAFETY_FINE_TEMPLATE_LANG (default "en")
+// Template must be category UTILITY (Marketing templates are silently dropped for Indian numbers).
+const TEMPLATE_NAME = Deno.env.get("SAFETY_FINE_TEMPLATE") || "safety_fine_notice"
+const TEMPLATE_LANGUAGE = Deno.env.get("SAFETY_FINE_TEMPLATE_LANG") || "en"
 const FRESH_WINDOW_MINUTES = 15
 
 const corsHeaders = {

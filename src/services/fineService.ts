@@ -104,7 +104,11 @@ export const todayIST = (): string =>
  * Falls back to the original file if the browser cannot decode it (e.g. HEIC on desktop Chrome).
  */
 const compressImage = async (file: File, maxEdge = 1600, quality = 0.82): Promise<Blob> => {
-  if (file.size < 400 * 1024) return file;
+  const type = (file.type || '').toLowerCase();
+  const isMetaSafe = type === 'image/jpeg' || type === 'image/jpg' || type === 'image/png';
+  // Small JPG/PNG can go as-is; everything else (WebP/HEIC) must be converted,
+  // because WhatsApp template image headers accept only JPEG and PNG.
+  if (isMetaSafe && file.size < 400 * 1024) return file;
   try {
     const bitmap = await createImageBitmap(file);
     const scale = Math.min(1, maxEdge / Math.max(bitmap.width, bitmap.height));
@@ -118,7 +122,8 @@ const compressImage = async (file: File, maxEdge = 1600, quality = 0.82): Promis
     ctx.drawImage(bitmap, 0, 0, w, h);
     bitmap.close?.();
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-    return blob && blob.size < file.size ? blob : file;
+    if (!blob) return file;
+    return !isMetaSafe || blob.size < file.size ? blob : file;
   } catch {
     return file;
   }
@@ -211,7 +216,11 @@ export const FineService = {
     const client = requireClient();
     const blob = await compressImage(file);
     const isJpeg = blob !== file || /jpe?g/i.test(file.type);
-    const ext = isJpeg ? 'jpg' : (file.type.split('/')[1] || 'jpg').replace(/[^a-z0-9]/gi, '').toLowerCase();
+    const isPng = !isJpeg && /png/i.test(file.type);
+    if (!isJpeg && !isPng) {
+      throw new Error('This image format could not be converted. Please use a JPG or PNG photo.');
+    }
+    const ext = isJpeg ? 'jpg' : 'png';
     const safeEmp = empId.replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 30);
     const rand = typeof crypto !== 'undefined' && 'randomUUID' in crypto
       ? crypto.randomUUID()
