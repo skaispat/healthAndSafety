@@ -98,6 +98,16 @@ export const FinePage: React.FC = () => {
 
   // Modals
   const [fineTarget, setFineTarget] = useState<FineEmployee | null>(null);
+  const [fineModalOpen, setFineModalOpen] = useState(false);
+  /** Open the fine modal; without an employee it starts with the employee picker. */
+  const openFineModal = (emp: FineEmployee | null = null) => {
+    setFineTarget(emp);
+    setFineModalOpen(true);
+  };
+  const closeFineModal = () => {
+    setFineModalOpen(false);
+    setFineTarget(null);
+  };
   const [previewFine, setPreviewFine] = useState<SafetyFine | null>(null);
   const [historyEmpId, setHistoryEmpId] = useState<string | null>(null);
   const [historyRefresh, setHistoryRefresh] = useState(0);
@@ -238,7 +248,7 @@ export const FinePage: React.FC = () => {
   }, [term, isSearchMode, allowed]);
 
   const handleFineSuccess = (fine: SafetyFine) => {
-    setFineTarget(null);
+    closeFineModal();
     const d = fine.date || '';
     const inRange = (!range.from || d >= range.from) && (!range.to || d <= range.to);
     if (inRange) {
@@ -266,7 +276,7 @@ export const FinePage: React.FC = () => {
 
   const openMarkFineFromHistory = (emp: FineEmployee) => {
     setHistoryEmpId(null);
-    setFineTarget(emp);
+    openFineModal(emp);
   };
 
   const openHistory = (empId: string | null) => {
@@ -286,6 +296,10 @@ export const FinePage: React.FC = () => {
             <p className="fine-subtitle">Search an employee to record a safety violation fine</p>
           </div>
         </div>
+
+        <button type="button" className="btn btn-primary fine-header-mark-btn" onClick={() => openFineModal()}>
+          Mark Fine
+        </button>
 
         <div className="fine-search-box">
           <div style={{ position: 'relative' }}>
@@ -368,7 +382,7 @@ export const FinePage: React.FC = () => {
                     <button type="button" className="btn btn-outline" onClick={() => openHistory(emp.emp_id)}>
                       <Eye size={16} /> History
                     </button>
-                    <button type="button" className="btn btn-primary" onClick={() => setFineTarget(emp)}>
+                    <button type="button" className="btn btn-primary" onClick={() => openFineModal(emp)}>
                       <Gavel size={16} /> Mark Fine
                     </button>
                   </div>
@@ -620,7 +634,12 @@ export const FinePage: React.FC = () => {
         onPreviewImage={(f) => setPreviewFine(f)}
       />
 
-      <MarkFineModal employee={fineTarget} onClose={() => setFineTarget(null)} onSuccess={handleFineSuccess} />
+      <MarkFineModal
+        isOpen={fineModalOpen}
+        employee={fineTarget}
+        onClose={closeFineModal}
+        onSuccess={handleFineSuccess}
+      />
 
       <ImagePreviewModal
         isOpen={Boolean(previewFine)}

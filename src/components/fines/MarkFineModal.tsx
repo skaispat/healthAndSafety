@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, ImagePlus, IndianRupee, Loader2, X, AlertCircle } from 'lucide-react';
+import { Camera, ImagePlus, IndianRupee, Loader2, X, AlertCircle, Search, ChevronRight } from 'lucide-react';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -9,16 +9,66 @@ import {
   FINE_LIMITS,
   validateFineAmount,
   validateFineImage,
+  sanitizeSearchTerm,
 } from '../../services/fineService';
 
 interface MarkFineModalProps {
+  isOpen: boolean;
+  /** Pre-selected employee. When null, the modal first asks to search & pick an employee. */
   employee: FineEmployee | null;
   onClose: () => void;
   onSuccess: (fine: SafetyFine) => void;
 }
 
-export const MarkFineModal: React.FC<MarkFineModalProps> = ({ employee, onClose, onSuccess }) => {
+export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: preselected, onClose, onSuccess }) => {
   const { showToast } = useToast();
+  const [employee, setEmployee] = useState<FineEmployee | null>(preselected);
+
+  // Employee picker (used when opened without a pre-selected employee)
+  const [pickQuery, setPickQuery] = useState('');
+  const [pickResults, setPickResults] = useState<FineEmployee[]>([]);
+  const [picking, setPicking] = useState(false);
+  const [pickError, setPickError] = useState<string | null>(null);
+  const pickSeq = useRef(0);
+  const pickTerm = sanitizeSearchTerm(pickQuery);
+
+  // Sync selection each time the modal opens
+  useEffect(() => {
+    if (!isOpen) return;
+    setEmployee(preselected);
+    setPickQuery('');
+    setPickResults([]);
+    setPickError(null);
+  }, [isOpen, preselected?.emp_id]);
+
+  // Debounced employee search with stale-response protection
+  useEffect(() => {
+    if (!isOpen || employee) return;
+    if (pickTerm.length < FINE_LIMITS.SEARCH_MIN_CHARS) {
+      pickSeq.current++;
+      setPickResults([]);
+      setPicking(false);
+      setPickError(null);
+      return;
+    }
+    const seq = ++pickSeq.current;
+    setPicking(true);
+    setPickError(null);
+    const t = window.setTimeout(async () => {
+      try {
+        const rows = await FineService.searchEmployees(pickTerm);
+        if (seq === pickSeq.current) setPickResults(rows);
+      } catch (err: any) {
+        if (seq === pickSeq.current) {
+          setPickResults([]);
+          setPickError(err?.message || 'Search failed.');
+        }
+      } finally {
+        if (seq === pickSeq.current) setPicking(false);
+      }
+    }, 350);
+    return () => window.clearTimeout(t);
+  }, [pickTerm, isOpen, employee]);
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [image, setImage] = useState<File | null>(null);
@@ -37,7 +87,7 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ employee, onClose,
     setErrors({});
     setSubmitting(false);
     submittingRef.current = false;
-  }, [employee?.emp_id]);
+  }, [employee?.emp_id, isOpen]);
 
   // Manage preview object URL lifecycle (avoid memory leaks)
   useEffect(() => {
@@ -120,11 +170,79 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ employee, onClose,
     }
   };
 
-  if (!employee) return null;
+  if (!isOpen) return null;
 
+  /* ---------- Step 1: pick an employee ---------- */
+  if (!employee) {
+    return (
+      <Modal
+        isOpen={isOpen}
+        onClose={handleClose}
+        title="Mark Fine"
+        subtitle="Select the employee to fine"
+        footer={
+          <button type="button" className="btn btn-secondary" onClick={handleClose}>
+            Cancel
+          </button>
+        }
+      >
+        <div style={{ position: 'relative', marginBottom: 12 }}>
+          <Search
+            size={16}
+            color="var(--text-muted)"
+            style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)' }}
+          />
+          <input
+            type="search"
+            className="form-input"
+            placeholder="Employee ID, name or phone number"
+            value={pickQuery}
+            maxLength={FINE_LIMITS.SEARCH_MAX_CHARS}
+            onChange={(e) => setPickQuery(e.target.value)}
+            style={{ paddingLeft: 36 }}
+            aria-label="Search employee to fine"
+            autoComplete="off"
+            autoFocus
+          />
+        </div>
+
+        {pickTerm.length < FINE_LIMITS.SEARCH_MIN_CHARS ? (
+          <div className="fine-empty">Type at least {FINE_LIMITS.SEARCH_MIN_CHARS} characters to search.</div>
+        ) : picking && pickResults.length === 0 ? (
+          <div className="fine-empty">
+            <Loader2 size={18} className="spin" /> Searching...
+          </div>
+        ) : pickError ? (
+          <div className="fine-empty fine-empty-error">{pickError}</div>
+        ) : pickResults.length === 0 ? (
+          <div className="fine-empty">No employees match “{pickTerm}”.</div>
+        ) : (
+          <div className="fine-pick-list" aria-busy={picking}>
+            {pickResults.map((emp) => (
+              <button key={emp.emp_id} type="button" className="fine-pick-item" onClick={() => setEmployee(emp)}>
+                <div className="fine-avatar">{(emp.full_name || '?').trim().charAt(0).toUpperCase()}</div>
+                <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
+                  <div className="fine-employee-name">{emp.full_name}</div>
+                  <div className="fine-employee-id">
+                    {emp.emp_id}
+                    {emp.department ? ` · ${emp.department}` : ''}
+                    {emp.designation ? ` · ${emp.designation}` : ''}
+                  </div>
+                </div>
+                {emp.is_active === false && <span className="fine-inactive">Inactive</span>}
+                <ChevronRight size={16} color="var(--text-muted)" style={{ flexShrink: 0 }} />
+              </button>
+            ))}
+          </div>
+        )}
+      </Modal>
+    );
+  }
+
+  /* ---------- Step 2: fine details ---------- */
   return (
     <Modal
-      isOpen={Boolean(employee)}
+      isOpen={isOpen}
       onClose={handleClose}
       title="Mark Fine"
       subtitle={`${employee.full_name} · ${employee.emp_id}`}
@@ -146,6 +264,23 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ employee, onClose,
       }
     >
       <form id="mark-fine-form" onSubmit={handleSubmit} noValidate>
+        {/* Selected employee summary; "Change" only when picked inside this modal */}
+        <div className="fine-selected-emp">
+          <div className="fine-avatar">{(employee.full_name || '?').trim().charAt(0).toUpperCase()}</div>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <div className="fine-employee-name">{employee.full_name}</div>
+            <div className="fine-employee-id">
+              {employee.emp_id}
+              {employee.department ? ` · ${employee.department}` : ''}
+            </div>
+          </div>
+          {!preselected && !submitting && (
+            <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEmployee(null)}>
+              Change
+            </button>
+          )}
+        </div>
+
         {errors.form && (
           <div className="fine-form-error" role="alert">
             <AlertCircle size={16} />
