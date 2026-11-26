@@ -8,6 +8,8 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 const FINE_BUCKET = 'observation';
 const FINE_FOLDER = 'fines';
+// Edge function slug as deployed in Supabase (URL: /functions/v1/safety_fine)
+const FINE_WHATSAPP_FUNCTION = 'safety_fine';
 
 export const FINE_LIMITS = {
   MAX_AMOUNT: 1_000_000,
@@ -292,7 +294,7 @@ export const FineService = {
   async sendFineWhatsApp(fineId: number): Promise<{ sent: boolean; error?: string }> {
     try {
       const client = requireClient();
-      const { data, error } = await client.functions.invoke('safety-fine-whatsapp', {
+      const { data, error } = await client.functions.invoke(FINE_WHATSAPP_FUNCTION, {
         body: { fine_id: fineId },
       });
       if (error) {
