@@ -19,6 +19,8 @@ import { AddTrainingPage } from './pages/training/AddTrainingPage';
 import { ReportsPage } from './pages/reports/ReportsPage';
 import { NotificationsPage } from './pages/notifications/NotificationsPage';
 import { LoginPage } from './pages/auth/LoginPage';
+import { FinePage } from './pages/fines/FinePage';
+import { canManageFines } from './utils/access';
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const { currentUser, loading } = useAuth();
@@ -161,6 +163,16 @@ export const AppRoutes: React.FC = () => {
         element={
           <MainLayout>
             {isAdminOrOfficer ? <AddTrainingPage /> : <Navigate to="/" replace />}
+          </MainLayout>
+        }
+      />
+
+      {/* Fine (Penalty) - Health & Safety / Super Admin only */}
+      <Route
+        path="/fines"
+        element={
+          <MainLayout>
+            {canManageFines(currentUser) ? <FinePage /> : <Navigate to="/" replace />}
           </MainLayout>
         }
       />
