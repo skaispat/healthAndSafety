@@ -201,7 +201,7 @@ export const DashboardPage: React.FC = () => {
         />
 
         {/* 3. Operational Grid */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: '20px', marginTop: '24px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))', gap: '20px', marginTop: '24px' }}>
           {/* Urgent Tasks Queue */}
           <div className="ehs-card">
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px' }}>
@@ -383,7 +383,7 @@ export const DashboardPage: React.FC = () => {
             <p style={{ fontSize: '0.8rem', marginTop: '4px' }}>All safe and compliant!</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(320px, 100%), 1fr))', gap: '16px' }}>
             {myTasks.map((task) => (
               <TaskCard
                 key={task.id}

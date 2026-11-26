@@ -146,7 +146,7 @@ export const AddTrainingPage: React.FC = () => {
         <form onSubmit={handleSubmit}>
           
           {/* Row 1: Department & Area */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '16px', marginBottom: '16px' }}>
             <div className="form-group">
               <label className="form-label">
                 Department Name <span className="required">*</span>
@@ -220,7 +220,7 @@ export const AddTrainingPage: React.FC = () => {
           </div>
 
           {/* Row 2: Topic & Number of Persons */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '16px', marginBottom: '16px' }}>
             <div className="form-group">
               <label className="form-label">
                 Training Topic <span className="required">*</span>
@@ -250,7 +250,7 @@ export const AddTrainingPage: React.FC = () => {
           </div>
 
           {/* Row 3: Training Date & Conducted By */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', marginBottom: '16px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '16px', marginBottom: '16px' }}>
             <div className="form-group">
               <label className="form-label">
                 Training Date <span className="required">*</span>

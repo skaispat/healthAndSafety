@@ -107,7 +107,7 @@ export const AppHeader: React.FC<AppHeaderProps> = ({ onToggleSidebar }) => {
                 top: '100%',
                 right: 0,
                 marginTop: '8px',
-                width: '260px',
+                width: 'min(260px, calc(100vw - 24px))',
                 background: '#ffffff',
                 border: '1px solid var(--border-hover)',
                 borderRadius: '12px',

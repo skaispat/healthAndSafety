@@ -345,7 +345,7 @@ export const MyTasksPage: React.FC = () => {
         </div>
 
         {/* Department Filter */}
-        <div style={{ width: '180px' }}>
+        <div style={{ flex: '1 1 180px', minWidth: 0 }}>
           <select
             className="form-select"
             value={deptFilter}

@@ -560,7 +560,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(320px, 100%), 1fr))',
                 gap: '14px',
                 alignItems: 'stretch',
               }}
@@ -1328,7 +1328,7 @@ export const TaskDetailModal: React.FC<TaskDetailModalProps> = ({
                     </label>
                   </div>
 
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(140px, 100%), 1fr))', gap: '10px' }}>
                     {/* Option 1: Partially Done (Save as Active) */}
                     <button
                       type="button"

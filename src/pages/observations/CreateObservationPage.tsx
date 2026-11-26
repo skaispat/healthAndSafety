@@ -231,7 +231,7 @@ export const CreateObservationPage: React.FC = () => {
               icon={<Building2 size={18} />}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: '16px' }}>
               {/* Department Dropdown */}
               <div className="form-group">
                 <label className="form-label">
@@ -270,7 +270,7 @@ export const CreateObservationPage: React.FC = () => {
 
           {/* STEP 2: RISK ASSESSMENT */}
           <div className="ehs-card" style={{ padding: '20px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '16px', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: '16px', alignItems: 'center' }}>
               <div className="form-group">
                 <label className="form-label">
                   Priority <span className="required">*</span>
@@ -359,7 +359,7 @@ export const CreateObservationPage: React.FC = () => {
               icon={<UserIcon size={18} />}
             />
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '18px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(280px, 100%), 1fr))', gap: '18px' }}>
               {/* Assignee */}
               <div className="form-group">
                 <label className="form-label">

@@ -236,7 +236,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
               title="Department & Plant Location"
               icon={<Building2 size={16} />}
             />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px' }}>
               <div className="form-group">
                 <label className="form-label">
                   Department <span className="required">*</span>
@@ -278,7 +278,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
               title="Risk Assessment & Priority"
               icon={<AlertTriangle size={16} />}
             />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px', alignItems: 'center' }}>
               <div className="form-group">
                 <label className="form-label">
                   Priority Rating <span className="required">*</span>
@@ -355,7 +355,7 @@ export const CreateObservationModal: React.FC<CreateObservationModalProps> = ({
               title="Task Assignment & Due Date"
               icon={<UserIcon size={16} />}
             />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px' }}>
               <div className="form-group">
                 <label className="form-label">
                   Task Assignee <span className="required">*</span>

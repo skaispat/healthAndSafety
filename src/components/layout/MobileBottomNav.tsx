@@ -1,7 +1,8 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { LayoutDashboard, PlusCircle, Eye, GraduationCap, Bell, CheckSquare } from 'lucide-react';
+import { LayoutDashboard, PlusCircle, Eye, GraduationCap, Bell, CheckSquare, Gavel } from 'lucide-react';
+import { canManageFines } from '../../utils/access';
 
 export const MobileBottomNav: React.FC = () => {
   const { isOfficer, currentUser } = useAuth();
@@ -61,13 +62,24 @@ export const MobileBottomNav: React.FC = () => {
         </NavLink>
       )}
 
-      <NavLink
-        to="/notifications"
-        className={({ isActive }) => `mobile-nav-btn ${isActive ? 'active' : ''}`}
-      >
-        <Bell size={20} />
-        <span>Alerts</span>
-      </NavLink>
+      {/* Fine replaces Alerts for H&S / Super Admin (alerts stay reachable via the header bell) */}
+      {canManageFines(currentUser) ? (
+        <NavLink
+          to="/fines"
+          className={({ isActive }) => `mobile-nav-btn ${isActive ? 'active' : ''}`}
+        >
+          <Gavel size={20} />
+          <span>Fine</span>
+        </NavLink>
+      ) : (
+        <NavLink
+          to="/notifications"
+          className={({ isActive }) => `mobile-nav-btn ${isActive ? 'active' : ''}`}
+        >
+          <Bell size={20} />
+          <span>Alerts</span>
+        </NavLink>
+      )}
     </nav>
   );
 };

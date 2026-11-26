@@ -123,7 +123,7 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
       size="lg"
     >
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '14px', marginBottom: '14px' }}>
           <div className="form-group">
             <label className="form-label">
               Department Name <span className="required">*</span>
@@ -196,7 +196,7 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '14px', marginBottom: '14px' }}>
           <div className="form-group">
             <label className="form-label">
               Training Topic <span className="required">*</span>
@@ -225,7 +225,7 @@ export const CreateTrainingModal: React.FC<CreateTrainingModalProps> = ({
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px', marginBottom: '14px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(220px, 100%), 1fr))', gap: '14px', marginBottom: '14px' }}>
           <div className="form-group">
             <label className="form-label">
               Training Date <span className="required">*</span>

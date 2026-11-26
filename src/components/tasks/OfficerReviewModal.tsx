@@ -128,7 +128,7 @@ export const OfficerReviewModal: React.FC<OfficerReviewModalProps> = ({
       title={`Safety Verification — ${task.task_number}`}
       size="xl"
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '14px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(300px, 100%), 1fr))', gap: '14px' }}>
         {/* LEFT COLUMN: Original Hazard Observation */}
         <div
           style={{

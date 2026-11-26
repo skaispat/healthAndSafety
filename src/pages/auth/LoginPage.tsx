@@ -73,13 +73,14 @@ export const LoginPage: React.FC = () => {
             src="/logo2.jpg"
             alt="Health & Safety Logo"
             style={{
-              width: '56px',
-              height: '56px',
-              borderRadius: '12px',
+              width: '100%',
+              maxWidth: '300px',
+              height: 'auto',
               objectFit: 'contain',
-              margin: '0 auto 14px',
-              boxShadow: 'var(--shadow-md)',
+              margin: '0 auto 18px',
               display: 'block',
+              // Blend the JPG's white background into the page so no box/card is visible
+              mixBlendMode: 'multiply',
             }}
           />
           <h1 style={{ fontSize: '1.75rem', fontWeight: 800, letterSpacing: '-0.02em', color: '#0f172a' }}>

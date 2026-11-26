@@ -132,6 +132,7 @@ export const TrainingRecordsPage: React.FC = () => {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
           gap: '12px',
           marginBottom: '16px',
         }}

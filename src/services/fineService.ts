@@ -21,6 +21,9 @@ export const FINE_LIMITS = {
   SEARCH_MAX_CHARS: 50,
   SEARCH_LIMIT: 25,
   PAGE_SIZE: 20,
+  BATCH_SIZE: 1000,
+  EXPORT_MAX: 5000,
+  HISTORY_LIMIT: 50,
 } as const;
 
 // Only non-sensitive columns. NEVER select password / username here.
@@ -143,6 +146,51 @@ const fetchHodNames = async (hodIds: string[]): Promise<Map<string, string>> => 
   return map;
 };
 
+export interface FineDateRange {
+  from?: string; // YYYY-MM-DD inclusive
+  to?: string; // YYYY-MM-DD inclusive
+}
+
+type FineRow = Omit<SafetyFine, 'employee'>;
+
+/** Recent-fines list entry: one per employee. */
+export interface FineGroup {
+  emp_id: string | null;
+  employee: SafetyFine['employee'];
+  latest: SafetyFine;
+  count: number; // fines in selected range
+  totalAmount: number; // sum in selected range
+}
+const FINE_COLUMNS = 'id, created_at, emp_id, fine_amount, reason, picture, date';
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** First day of current month in IST (YYYY-MM-01). */
+export const monthStartIST = (): string => `${todayIST().slice(0, 8)}01`;
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const applyDateRange = <Q extends { gte: any; lte: any }>(query: Q, range: FineDateRange): Q => {
+  let q = query;
+  if (range.from && ISO_DATE.test(range.from)) q = q.gte('date', range.from);
+  if (range.to && ISO_DATE.test(range.to)) q = q.lte('date', range.to);
+  return q;
+};
+
+const attachEmployees = async (rows: FineRow[]): Promise<SafetyFine[]> => {
+  const empIds = Array.from(new Set(rows.map((r) => r.emp_id).filter(Boolean))) as string[];
+  const empMap = new Map<string, SafetyFine['employee']>();
+  const client = requireClient();
+  // Chunk IN() lists to keep URLs short
+  for (let i = 0; i < empIds.length; i += 200) {
+    const { data, error } = await client
+      .from('users2')
+      .select('emp_id, full_name, department, designation')
+      .in('emp_id', empIds.slice(i, i + 200));
+    if (error) console.warn('Unable to resolve employee names for fines:', error.message);
+    (data || []).forEach((e: any) => empMap.set(String(e.emp_id), e));
+  }
+  return rows.map((r) => ({ ...r, employee: r.emp_id ? empMap.get(String(r.emp_id)) || null : null }));
+};
+
 export const FineService = {
   /** Search employees in users2 by emp_id, full_name or phone_number. */
   async searchEmployees(rawTerm: string): Promise<FineEmployee[]> {
@@ -172,15 +220,16 @@ export const FineService = {
     }));
   },
 
-  /** Paginated list of most recent fines, joined with employee info. */
-  async getRecentFines(page = 0): Promise<{ fines: SafetyFine[]; hasMore: boolean }> {
+  /** Paginated list of most recent fines (optionally within a date range), joined with employee info. */
+  async getRecentFines(page = 0, range: FineDateRange = {}): Promise<{ fines: SafetyFine[]; hasMore: boolean }> {
     const client = requireClient();
     const from = page * FINE_LIMITS.PAGE_SIZE;
     const to = from + FINE_LIMITS.PAGE_SIZE; // fetch one extra row to detect "hasMore"
 
-    const { data, error } = await client
-      .from('safety_fines')
-      .select('id, created_at, emp_id, fine_amount, reason, picture, date')
+    const { data, error } = await applyDateRange(
+      client.from('safety_fines').select(FINE_COLUMNS),
+      range
+    )
       .order('created_at', { ascending: false })
       .order('id', { ascending: false })
       .range(from, to);
@@ -190,25 +239,130 @@ export const FineService = {
       throw new Error('Could not load recent fines.');
     }
 
-    const rows = data || [];
+    const rows = (data || []) as FineRow[];
     const hasMore = rows.length > FINE_LIMITS.PAGE_SIZE;
-    const pageRows = rows.slice(0, FINE_LIMITS.PAGE_SIZE);
+    return { fines: await attachEmployees(rows.slice(0, FINE_LIMITS.PAGE_SIZE)), hasMore };
+  },
 
-    const empIds = Array.from(new Set(pageRows.map((r) => r.emp_id).filter(Boolean))) as string[];
-    const empMap = new Map<string, SafetyFine['employee']>();
-    if (empIds.length > 0) {
-      const { data: emps, error: empErr } = await client
-        .from('users2')
-        .select('emp_id, full_name, department, designation')
-        .in('emp_id', empIds);
-      if (empErr) console.warn('Unable to resolve employee names for fines:', empErr.message);
-      (emps || []).forEach((e: any) => empMap.set(String(e.emp_id), e));
+  /** All fines in a date range (for PDF export). Fetched in batches; capped at EXPORT_MAX rows. */
+  async getFinesForExport(range: FineDateRange = {}): Promise<{ fines: SafetyFine[]; truncated: boolean }> {
+    const client = requireClient();
+    const rows: FineRow[] = [];
+    let truncated = false;
+    for (let offset = 0; ; offset += FINE_LIMITS.BATCH_SIZE) {
+      const { data, error } = await applyDateRange(
+        client.from('safety_fines').select(FINE_COLUMNS),
+        range
+      )
+        .order('date', { ascending: false, nullsFirst: false })
+        .order('created_at', { ascending: false })
+        .range(offset, offset + FINE_LIMITS.BATCH_SIZE - 1);
+      if (error) {
+        console.error('Export fetch failed:', error);
+        throw new Error('Could not load fines for export.');
+      }
+      const batch = (data || []) as FineRow[];
+      rows.push(...batch);
+      if (batch.length < FINE_LIMITS.BATCH_SIZE) break;
+      if (rows.length >= FINE_LIMITS.EXPORT_MAX) {
+        truncated = true;
+        break;
+      }
+    }
+    return { fines: await attachEmployees(rows.slice(0, FINE_LIMITS.EXPORT_MAX)), truncated };
+  },
+
+  /**
+   * One entry per employee for the selected range: their latest fine plus count & total amount.
+   * Sorted by most recent fine first. Built from all fines in range (capped at EXPORT_MAX).
+   */
+  async getGroupedFines(range: FineDateRange = {}): Promise<{ groups: FineGroup[]; truncated: boolean }> {
+    const { fines, truncated } = await this.getFinesForExport(range);
+    const map = new Map<string, FineGroup>();
+    for (const f of fines) {
+      const key = f.emp_id ? String(f.emp_id) : `__none_${f.id}`;
+      const amt = Number(f.fine_amount);
+      const g = map.get(key);
+      if (!g) {
+        map.set(key, { emp_id: f.emp_id, employee: f.employee, latest: f, count: 1, totalAmount: Number.isFinite(amt) ? amt : 0 });
+        continue;
+      }
+      g.count += 1;
+      if (Number.isFinite(amt)) g.totalAmount += amt;
+      if (f.created_at > g.latest.created_at || (f.created_at === g.latest.created_at && f.id > g.latest.id)) g.latest = f;
+    }
+    const groups = Array.from(map.values()).sort((a, b) =>
+      a.latest.created_at === b.latest.created_at ? b.latest.id - a.latest.id : a.latest.created_at < b.latest.created_at ? 1 : -1
+    );
+    return { groups, truncated };
+  },
+
+  /** Number of fines per employee in the current calendar month (IST). */
+  async getCurrentMonthCounts(): Promise<Map<string, number>> {
+    const client = requireClient();
+    const counts = new Map<string, number>();
+    const range = { from: monthStartIST(), to: todayIST() };
+    for (let offset = 0; offset < FINE_LIMITS.EXPORT_MAX; offset += FINE_LIMITS.BATCH_SIZE) {
+      const { data, error } = await applyDateRange(client.from('safety_fines').select('emp_id'), range)
+        .order('id', { ascending: true })
+        .range(offset, offset + FINE_LIMITS.BATCH_SIZE - 1);
+      if (error) {
+        console.warn('Monthly fine counts failed:', error.message);
+        return counts;
+      }
+      (data || []).forEach((r: { emp_id: string | null }) => {
+        if (r.emp_id) counts.set(String(r.emp_id), (counts.get(String(r.emp_id)) || 0) + 1);
+      });
+      if (!data || data.length < FINE_LIMITS.BATCH_SIZE) break;
+    }
+    return counts;
+  },
+
+  /** Employee profile + their fine history (latest first). */
+  async getEmployeeFineHistory(empId: string): Promise<{
+    employee: FineEmployee | null;
+    fines: SafetyFine[];
+    totalCount: number;
+    totalAmount: number;
+  }> {
+    const client = requireClient();
+    const id = String(empId || '').trim();
+    if (!id) throw new Error('Employee ID is required.');
+
+    const [empRes, finesRes] = await Promise.all([
+      client.from('users2').select(EMPLOYEE_COLUMNS).eq('emp_id', id).maybeSingle(),
+      client
+        .from('safety_fines')
+        .select(FINE_COLUMNS, { count: 'exact' })
+        .eq('emp_id', id)
+        .order('created_at', { ascending: false })
+        .limit(FINE_LIMITS.HISTORY_LIMIT),
+    ]);
+
+    if (empRes.error) throw new Error('Could not load employee details.');
+    if (finesRes.error) throw new Error('Could not load fine history.');
+
+    let employee: FineEmployee | null = null;
+    if (empRes.data) {
+      const e = empRes.data as Omit<FineEmployee, 'hod_name'>;
+      const hodMap = await fetchHodNames(e.hod_id ? [String(e.hod_id)] : []);
+      employee = { ...e, emp_id: String(e.emp_id), hod_name: e.hod_id ? hodMap.get(String(e.hod_id)) || null : null };
     }
 
-    return {
-      fines: pageRows.map((r) => ({ ...r, employee: r.emp_id ? empMap.get(String(r.emp_id)) || null : null })),
-      hasMore,
-    };
+    const empInfo: SafetyFine['employee'] = employee
+      ? { emp_id: employee.emp_id, full_name: employee.full_name, department: employee.department, designation: employee.designation }
+      : null;
+    const fines = ((finesRes.data || []) as FineRow[]).map((r) => ({ ...r, employee: empInfo }));
+
+    // Sum over all fines (not only the displayed page)
+    let totalAmount = 0;
+    const { data: amounts } = await client.from('safety_fines').select('fine_amount').eq('emp_id', id);
+    (amounts || []).forEach((r: { fine_amount: string | null }) => {
+      const n = Number(r.fine_amount);
+      if (Number.isFinite(n)) totalAmount += n;
+    });
+
+    return { employee, fines, totalCount: finesRes.count ?? fines.length, totalAmount };
   },
 
   /** Upload evidence image to the 'observation' bucket. Returns public URL + storage path. */

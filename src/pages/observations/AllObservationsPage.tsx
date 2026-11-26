@@ -206,16 +206,7 @@ export const AllObservationsPage: React.FC = () => {
   return (
     <div className="page-wrapper">
       {/* Header */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          flexWrap: 'wrap',
-          gap: '16px',
-          marginBottom: '20px',
-        }}
-      >
+      <div className="obs-page-header">
         <div>
           <h2 style={{ fontSize: '1.4rem', fontWeight: 800, margin: 0 }}>Safety Observations & Tasks</h2>
         </div>
@@ -251,19 +242,9 @@ export const AllObservationsPage: React.FC = () => {
       </div>
 
       {/* Filter & Search Bar */}
-      <div
-        className="ehs-card"
-        style={{
-          padding: '14px',
-          marginBottom: '20px',
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '12px',
-          alignItems: 'center',
-        }}
-      >
+      <div className="ehs-card obs-filter-bar">
         {/* Search input */}
-        <div style={{ position: 'relative', flex: '1 1 260px', minWidth: '220px' }}>
+        <div className="obs-filter-search" style={{ position: 'relative' }}>
           <Search
             size={16}
             color="var(--text-muted)"
@@ -280,7 +261,7 @@ export const AllObservationsPage: React.FC = () => {
         </div>
 
         {/* Department Filter */}
-        <div style={{ flex: '1 1 160px', minWidth: '150px' }}>
+        <div className="obs-filter-select">
           <select
             className="form-select"
             value={deptFilter}
@@ -296,7 +277,7 @@ export const AllObservationsPage: React.FC = () => {
         </div>
 
         {/* Priority Filter */}
-        <div style={{ flex: '1 1 140px', minWidth: '130px' }}>
+        <div className="obs-filter-select">
           <select
             className="form-select"
             value={priorityFilter}
@@ -467,14 +448,16 @@ export const AllObservationsPage: React.FC = () => {
                       background: isReviewNeeded ? 'rgba(245, 158, 11, 0.03)' : '#ffffff',
                     }}
                   >
-                    <div className="mobile-card-row">
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <span style={{ fontWeight: 800, fontFamily: 'var(--font-mono)', color: 'var(--brand-primary)', fontSize: '0.88rem' }}>
-                          #{index + 1} • {obs.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}
-                        </span>
+                    {/* Number on its own line, badges wrap underneath — never squeezed side by side */}
+                    <div className="obs-card-head">
+                      <span className="obs-card-number">
+                        <span className="obs-card-index">#{index + 1}</span>
+                        {obs.observation_number || `SKAEHS/2026-27/OB-${String(index + 1).padStart(2, '0')}`}
+                      </span>
+                      <div className="obs-card-badges">
                         <PriorityBadge priority={obs.priority} />
+                        <ObservationStatusBadge status={obs.status} />
                       </div>
-                      <ObservationStatusBadge status={obs.status} />
                     </div>
 
                     <div style={{ fontSize: '0.88rem', fontWeight: 700, color: 'var(--text-primary)', lineHeight: 1.35 }}>
@@ -612,7 +595,7 @@ export const AllObservationsPage: React.FC = () => {
             </div>
 
             {/* SEQUENCE 2: TASK ASSIGNMENT & TARGET DUE DATE */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '10px', padding: '12px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(200px, 100%), 1fr))', gap: '10px', padding: '12px 14px', background: '#f8fafc', borderRadius: '8px', border: '1px solid var(--border-subtle)' }}>
               <div>
                 <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', fontWeight: 700, textTransform: 'uppercase' }}>
                   Step 2: Task Assignee

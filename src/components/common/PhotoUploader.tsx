@@ -231,7 +231,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: compact ? 'repeat(auto-fill, minmax(72px, 1fr))' : 'repeat(auto-fill, minmax(110px, 1fr))',
+            gridTemplateColumns: compact ? 'repeat(auto-fill, minmax(72px, 1fr))' : 'repeat(auto-fill, minmax(min(110px, 100%), 1fr))',
             gap: compact ? '8px' : '12px',
             marginBottom: '10px',
           }}
@@ -488,7 +488,7 @@ export const PhotoUploader: React.FC<PhotoUploaderProps> = ({
                 justifyContent: 'center',
                 background: '#0f172a',
                 overflow: 'hidden',
-                minWidth: '320px',
+                minWidth: 'min(320px, 100%)',
                 minHeight: '260px',
               }}
             >

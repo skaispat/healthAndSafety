@@ -192,7 +192,7 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
               title="Department & Plant Location"
               icon={<Building2 size={16} />}
             />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px' }}>
               <div className="form-group">
                 <label className="form-label">
                   Department <span className="required">*</span>
@@ -234,7 +234,7 @@ export const CreateOfficerTaskModal: React.FC<CreateOfficerTaskModalProps> = ({
               title="Risk Assessment & Priority"
               icon={<AlertTriangle size={16} />}
             />
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '14px', alignItems: 'center' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '14px', alignItems: 'center' }}>
               <div className="form-group">
                 <label className="form-label">
                   Priority Rating <span className="required">*</span>

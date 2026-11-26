@@ -92,7 +92,7 @@ export const MyObservationsPage: React.FC = () => {
           </button>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(min(280px, 100%), 1fr))', gap: '16px' }}>
           {personalObs.map((obs, index) => {
             const isOpen = obs.status === 'OPEN';
 

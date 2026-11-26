@@ -104,7 +104,7 @@ export const PersonalObservationModal: React.FC<PersonalObservationModalProps> =
       size="lg"
     >
       <form onSubmit={handleSubmit}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '16px' }}>
           <div className="form-group">
             <label className="form-label">
               Department <span className="required">*</span>
@@ -163,7 +163,7 @@ export const PersonalObservationModal: React.FC<PersonalObservationModalProps> =
           />
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px', margin: '14px 0 20px 0' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(240px, 100%), 1fr))', gap: '16px', margin: '14px 0 20px 0' }}>
           <div className="form-group">
             <label className="form-label">Priority</label>
             <select
