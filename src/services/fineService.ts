@@ -6,7 +6,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
    Storage bucket: 'observation' (images stored under the "fines/" prefix)
    ========================================================================== */
 
-const FINE_BUCKET = 'observation';
+export const FINE_BUCKET = 'observation';
 const FINE_FOLDER = 'fines';
 // Edge function slug as deployed in Supabase (URL: /functions/v1/safety_fine)
 const FINE_WHATSAPP_FUNCTION = 'safety_fine';
@@ -58,7 +58,7 @@ export interface CreateFineInput {
   image: File;
 }
 
-const requireClient = () => {
+export const requireClient = () => {
   if (!isSupabaseConfigured() || !supabase) {
     throw new Error('Database connection is not configured. Please contact the administrator.');
   }
@@ -85,10 +85,38 @@ export const validateFineAmount = (raw: string): { value?: string; error?: strin
   return { value: Number.isInteger(n) ? String(n) : n.toFixed(2) };
 };
 
+/**
+ * HEIC/HEIF detection. Windows/Chrome often report an EMPTY mime type for .heic files,
+ * so the file extension is checked as well.
+ */
+export const isHeicFile = (file: File): boolean =>
+  /^image\/hei[cf](-sequence)?$/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
+
+/** `accept` attribute for evidence pickers (extensions included for Windows file dialogs). */
+export const FINE_IMAGE_ACCEPT = 'image/jpeg,image/png,image/webp,image/heic,image/heif,.jpg,.jpeg,.png,.webp,.heic,.heif';
+
+/**
+ * Convert HEIC/HEIF photos (iPhone default) to JPEG so every browser can preview them and
+ * WhatsApp can use them. Non-HEIC files are returned unchanged. The converter (~3 MB) is
+ * loaded on demand only when a HEIC file is picked.
+ */
+export const normalizeFineImage = async (file: File): Promise<File> => {
+  if (!isHeicFile(file)) return file;
+  try {
+    const { heicTo } = await import('heic-to');
+    const blob = await heicTo({ blob: file, type: 'image/jpeg', quality: 0.85 });
+    const base = (file.name || 'photo').replace(/\.(heic|heif)$/i, '') || 'photo';
+    return new File([blob], `${base}.jpg`, { type: 'image/jpeg', lastModified: Date.now() });
+  } catch (err) {
+    console.error('HEIC conversion failed:', err);
+    throw new Error('Could not read this HEIC photo. Please try another photo or use JPG/PNG.');
+  }
+};
+
 export const validateFineImage = (file: File | null): string | null => {
   if (!file) return 'Evidence image is required.';
   const type = (file.type || '').toLowerCase();
-  if (!(FINE_LIMITS.ALLOWED_IMAGE_TYPES as readonly string[]).includes(type)) {
+  if (!(FINE_LIMITS.ALLOWED_IMAGE_TYPES as readonly string[]).includes(type) && !isHeicFile(file)) {
     return 'Only JPG, PNG, WebP or HEIC images are allowed.';
   }
   if (file.size > FINE_LIMITS.MAX_IMAGE_BYTES) return 'Image must be smaller than 10 MB.';
@@ -168,7 +196,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const monthStartIST = (): string => `${todayIST().slice(0, 8)}01`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const applyDateRange = <Q extends { gte: any; lte: any }>(query: Q, range: FineDateRange): Q => {
+export const applyDateRange = <Q extends { gte: any; lte: any }>(query: Q, range: FineDateRange): Q => {
   let q = query;
   if (range.from && ISO_DATE.test(range.from)) q = q.gte('date', range.from);
   if (range.to && ISO_DATE.test(range.to)) q = q.lte('date', range.to);
@@ -366,8 +394,10 @@ export const FineService = {
   },
 
   /** Upload evidence image to the 'observation' bucket. Returns public URL + storage path. */
-  async uploadFineImage(file: File, empId: string): Promise<{ url: string; path: string }> {
+  async uploadFineImage(rawFile: File, empId: string): Promise<{ url: string; path: string }> {
     const client = requireClient();
+    // Safety net: the modals convert HEIC on pick, but never upload a raw HEIC
+    const file = await normalizeFineImage(rawFile);
     const blob = await compressImage(file);
     const isJpeg = blob !== file || /jpe?g/i.test(file.type);
     const isPng = !isJpeg && /png/i.test(file.type);

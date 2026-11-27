@@ -1886,3 +1886,25 @@ canvas {
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
+
+/* Fine page: Employees / Contractors tabs */
+.fine-tabs { display: flex; gap: 6px; padding: 4px; background: #f1f5f9; border-radius: 10px; margin-bottom: 16px; width: fit-content; max-width: 100%; }
+.fine-tab { display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 8px 18px; border: none; border-radius: 8px; background: transparent; color: var(--text-secondary); font-weight: 700; font-size: 0.85rem; cursor: pointer; min-height: 38px; white-space: nowrap; transition: background 0.15s ease, color 0.15s ease; }
+.fine-tab:hover { color: var(--text-primary); }
+.fine-tab-active { background: #ffffff; color: #b91c1c; box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12); }
+
+/* Two-column form row (department + phone) that stacks on phones */
+.fine-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 0 12px; }
+.fine-form-grid .form-input[readonly] { background: #f8fafc; color: var(--text-secondary); cursor: default; }
+
+@media (max-width: 640px) {
+  .fine-tabs { width: 100%; }
+  .fine-tab { flex: 1 1 0; padding: 8px 10px; }
+}
+
+/* Fine modals: HEIC conversion state + previous-worker chips */
+.fine-image-converting { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 120px; border: 1px dashed var(--border-hover); border-radius: 10px; background: #f8fafc; color: var(--text-secondary); font-size: 0.85rem; font-weight: 600; }
+.fine-worker-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.fine-worker-chip { border: 1px solid var(--border-subtle); background: #fff; color: var(--text-secondary); border-radius: 999px; padding: 4px 10px; font-size: 0.75rem; font-weight: 600; cursor: pointer; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 28px; }
+.fine-worker-chip:hover { border-color: var(--brand-primary); color: var(--brand-primary); }
+.fine-worker-chip-active { background: #fee2e2; border-color: #fecaca; color: #b91c1c; }

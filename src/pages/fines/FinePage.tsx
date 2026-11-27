@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   Gavel,
   Search,
@@ -13,8 +13,7 @@ import {
   ImageIcon,
   RefreshCw,
   Users,
-  CalendarRange,
-  FileDown,
+  HardHat,
   Eye,
   ChevronRight,
 } from 'lucide-react';
@@ -34,9 +33,11 @@ import {
   FineDateRange,
   FineGroup,
   sanitizeSearchTerm,
-  todayIST,
-  monthStartIST,
 } from '../../services/fineService';
+import { FineDateFilterBar } from '../../components/fines/FineDateFilterBar';
+import { ContractorFinesTab, ContractorFinesTabHandle } from './ContractorFinesTab';
+
+type FineTab = 'employee' | 'contractor';
 
 /** Red label shown when an employee has more than one fine in the current month. */
 const MonthCountBadge: React.FC<{ count: number | undefined }> = ({ count }) =>
@@ -70,6 +71,9 @@ export const FinePage: React.FC = () => {
   const { currentUser } = useAuth();
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab: FineTab = searchParams.get('tab') === 'contractor' ? 'contractor' : 'employee';
+  const contractorTabRef = useRef<ContractorFinesTabHandle>(null);
   const allowed = canManageFines(currentUser);
 
   // Search
@@ -88,9 +92,6 @@ export const FinePage: React.FC = () => {
 
   // Date range filter (applied) + draft inputs
   const [range, setRange] = useState<FineDateRange>({});
-  const [draftFrom, setDraftFrom] = useState('');
-  const [draftTo, setDraftTo] = useState('');
-  const [rangeError, setRangeError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
 
   // Per-employee fine counts for the current month
@@ -111,10 +112,23 @@ export const FinePage: React.FC = () => {
   const [previewFine, setPreviewFine] = useState<SafetyFine | null>(null);
   const [historyEmpId, setHistoryEmpId] = useState<string | null>(null);
   const [historyRefresh, setHistoryRefresh] = useState(0);
-  const today = todayIST();
 
   const term = sanitizeSearchTerm(query);
-  const isSearchMode = term.length >= FINE_LIMITS.SEARCH_MIN_CHARS;
+  const isSearchMode = tab === 'employee' && term.length >= FINE_LIMITS.SEARCH_MIN_CHARS;
+
+  const switchTab = (next: FineTab) => {
+    if (next === tab) return;
+    setQuery('');
+    const params = new URLSearchParams(searchParams);
+    if (next === 'contractor') params.set('tab', 'contractor');
+    else params.delete('tab');
+    setSearchParams(params, { replace: true });
+  };
+
+  const handleHeaderMarkFine = () => {
+    if (tab === 'contractor') contractorTabRef.current?.openMarkFine();
+    else openFineModal();
+  };
 
   // Access guard
   useEffect(() => {
@@ -165,33 +179,6 @@ export const FinePage: React.FC = () => {
   const refreshAll = () => {
     loadFines();
     loadMonthCounts();
-  };
-
-  const applyRange = (next: FineDateRange) => {
-    if (next.from && next.to && next.from > next.to) {
-      setRangeError('"From" date cannot be after "To" date.');
-      return;
-    }
-    if ((next.from && next.from > today) || (next.to && next.to > today)) {
-      setRangeError('Dates cannot be in the future.');
-      return;
-    }
-    setRangeError(null);
-    setDraftFrom(next.from || '');
-    setDraftTo(next.to || '');
-    setRange({ from: next.from || undefined, to: next.to || undefined });
-  };
-
-  /** Auto-apply the range as soon as a date is picked (or cleared). Invalid ranges are shown, not applied. */
-  const handleDateChange = (which: 'from' | 'to', value: string) => {
-    const nextFrom = which === 'from' ? value : draftFrom;
-    const nextTo = which === 'to' ? value : draftTo;
-    if (which === 'from') setDraftFrom(value);
-    else setDraftTo(value);
-    // Ignore partially-typed dates (desktop keyboard entry emits '' until complete)
-    if (value && !/^\d{4}-\d{2}-\d{2}$/.test(value)) return;
-    if (nextFrom === (range.from || '') && nextTo === (range.to || '')) return;
-    applyRange({ from: nextFrom, to: nextTo });
   };
 
   const handleExport = async () => {
@@ -297,7 +284,7 @@ export const FinePage: React.FC = () => {
           </div>
         </div>
 
-        <button type="button" className="btn btn-primary fine-header-mark-btn" onClick={() => openFineModal()}>
+        <button type="button" className="btn btn-primary fine-header-mark-btn" onClick={handleHeaderMarkFine}>
           Mark Fine
         </button>
 
@@ -311,7 +298,11 @@ export const FinePage: React.FC = () => {
             <input
               type="search"
               className="form-input"
-              placeholder="Search by Employee ID, name or phone number"
+              placeholder={
+                tab === 'contractor'
+                  ? 'Search contractor, worker, department or phone'
+                  : 'Search by Employee ID, name or phone number'
+              }
               value={query}
               maxLength={FINE_LIMITS.SEARCH_MAX_CHARS}
               onChange={(e) => setQuery(e.target.value)}
@@ -331,7 +322,7 @@ export const FinePage: React.FC = () => {
               </button>
             )}
           </div>
-          {query.trim().length > 0 && !isSearchMode && (
+          {tab === 'employee' && query.trim().length > 0 && !isSearchMode && (
             <span className="form-hint" style={{ display: 'block', marginTop: 6 }}>
               Type at least {FINE_LIMITS.SEARCH_MIN_CHARS} characters to search.
             </span>
@@ -339,7 +330,31 @@ export const FinePage: React.FC = () => {
         </div>
       </div>
 
-      {isSearchMode ? (
+      {/* Employees / Contractors tabs */}
+      <div className="fine-tabs" role="tablist" aria-label="Fine type">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'employee'}
+          className={`fine-tab ${tab === 'employee' ? 'fine-tab-active' : ''}`}
+          onClick={() => switchTab('employee')}
+        >
+          <Users size={16} /> Employees
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === 'contractor'}
+          className={`fine-tab ${tab === 'contractor' ? 'fine-tab-active' : ''}`}
+          onClick={() => switchTab('contractor')}
+        >
+          <HardHat size={16} /> Contractors
+        </button>
+      </div>
+
+      {tab === 'contractor' ? (
+        <ContractorFinesTab ref={contractorTabRef} searchQuery={query} />
+      ) : isSearchMode ? (
         /* ================= SEARCH RESULTS ================= */
         <section>
           <div className="fine-section-title">
@@ -410,60 +425,13 @@ export const FinePage: React.FC = () => {
           </div>
 
           {/* Date range filter + export */}
-          <div className="ehs-card fine-filter-bar">
-            <div className="fine-filter-dates">
-              <label className="fine-filter-field">
-                <span>From</span>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={draftFrom}
-                  max={draftTo || today}
-                  onChange={(e) => handleDateChange('from', e.target.value)}
-                />
-              </label>
-              <label className="fine-filter-field">
-                <span>To</span>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={draftTo}
-                  min={draftFrom || undefined}
-                  max={today}
-                  onChange={(e) => handleDateChange('to', e.target.value)}
-                />
-              </label>
-            </div>
-            <div className="fine-filter-actions">
-              <button
-                type="button"
-                className="btn btn-outline btn-sm"
-                onClick={() => applyRange({ from: monthStartIST(), to: today })}
-                disabled={loadingFines}
-              >
-                <CalendarRange size={15} /> This Month
-              </button>
-              {rangeActive && (
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => applyRange({})} disabled={loadingFines}>
-                  <X size={15} /> Clear
-                </button>
-              )}
-              <button
-                type="button"
-                className="btn btn-primary btn-sm fine-export-btn"
-                onClick={handleExport}
-                disabled={exporting || loadingFines}
-              >
-                {exporting ? <Loader2 size={15} className="spin" /> : <FileDown size={15} />}
-                {exporting ? 'Exporting...' : 'Export PDF'}
-              </button>
-            </div>
-            {rangeError && (
-              <span className="fine-field-error" style={{ width: '100%' }}>
-                {rangeError}
-              </span>
-            )}
-          </div>
+          <FineDateFilterBar
+            range={range}
+            onChange={setRange}
+            onExport={handleExport}
+            loading={loadingFines}
+            exporting={exporting}
+          />
 
           {loadingFines ? (
             <div className="ehs-card fine-empty">

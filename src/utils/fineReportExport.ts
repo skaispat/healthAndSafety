@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf';
 import type { SafetyFine, FineDateRange } from '../services/fineService';
+import type { ContractorFine } from '../services/contractorFineService';
 import { formatISTDate, formatISTDateTime } from './dateUtils';
 
 // jsPDF's built-in Helvetica has no "₹" glyph, so PDFs use "Rs."
@@ -22,24 +23,31 @@ const describeRange = (r: FineDateRange) => {
   return 'All dates';
 };
 
-export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: { truncated?: boolean } = {}) => {
+interface Column {
+  title: string;
+  w: number; // mm; 0 = take remaining width
+  right?: boolean;
+  amount?: boolean; // highlighted in brand colour
+}
+
+interface ReportSpec {
+  title: string;
+  footer: string;
+  filePrefix: string;
+  range: FineDateRange;
+  truncated?: boolean;
+  summary: [string, string, boolean?][]; // label, value, highlight
+  columns: Column[];
+  rows: string[][];
+}
+
+/** Shared landscape A4 table report (header, summary boxes, paginated table, page numbers). */
+const buildReport = (spec: ReportSpec) => {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const W = pdf.internal.pageSize.getWidth();
   const H = pdf.internal.pageSize.getHeight();
   const M = 12;
   const BRAND: [number, number, number] = [185, 28, 28];
-
-  // ---------- Summary ----------
-  const totalAmount = fines.reduce((s, f) => s + amountOf(f.fine_amount), 0);
-  const perEmp = new Map<string, { name: string; count: number; amount: number }>();
-  fines.forEach((f) => {
-    const id = f.emp_id || '—';
-    const cur = perEmp.get(id) || { name: f.employee?.full_name || 'Unknown', count: 0, amount: 0 };
-    cur.count += 1;
-    cur.amount += amountOf(f.fine_amount);
-    perEmp.set(id, cur);
-  });
-  const repeat = Array.from(perEmp.values()).filter((e) => e.count > 1).length;
 
   // ---------- Header ----------
   pdf.setFillColor(...BRAND);
@@ -47,7 +55,7 @@ export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: 
   pdf.setTextColor(255, 255, 255);
   pdf.setFont('helvetica', 'bold');
   pdf.setFontSize(15);
-  pdf.text('SKA Ispat - Safety Fine Report', M, 12.5);
+  pdf.text(spec.title, M, 12.5);
   pdf.setFont('helvetica', 'normal');
   pdf.setFontSize(9);
   pdf.text(`Generated: ${safe(formatISTDateTime(new Date()))}`, W - M, 12.5, { align: 'right' });
@@ -55,17 +63,12 @@ export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: 
   pdf.setTextColor(30, 41, 59);
   pdf.setFontSize(10);
   pdf.setFont('helvetica', 'bold');
-  pdf.text(`Period: ${safe(describeRange(range))}`, M, 28);
+  pdf.text(`Period: ${safe(describeRange(spec.range))}`, M, 28);
 
-  // Summary boxes
-  const boxes = [
-    ['Total Fines', String(fines.length)],
-    ['Total Amount', rs(totalAmount)],
-    ['Employees Fined', String(perEmp.size)],
-    ['Repeat Offenders', String(repeat)],
-  ];
-  const bw = (W - M * 2 - 9) / 4;
-  boxes.forEach(([label, value], i) => {
+  // ---------- Summary boxes ----------
+  const n = spec.summary.length;
+  const bw = (W - M * 2 - 3 * (n - 1)) / n;
+  spec.summary.forEach(([label, value, highlight], i) => {
     const x = M + i * (bw + 3);
     pdf.setDrawColor(226, 232, 240);
     pdf.setFillColor(248, 250, 252);
@@ -76,34 +79,27 @@ export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: 
     pdf.text(label, x + 4, 37.5);
     pdf.setFont('helvetica', 'bold');
     pdf.setFontSize(12);
-    pdf.setTextColor(i === 1 || i === 3 ? BRAND[0] : 30, i === 1 || i === 3 ? BRAND[1] : 41, i === 1 || i === 3 ? BRAND[2] : 59);
+    if (highlight) pdf.setTextColor(...BRAND);
+    else pdf.setTextColor(30, 41, 59);
     pdf.text(value, x + 4, 44);
   });
 
-  if (opts.truncated) {
+  if (spec.truncated) {
     pdf.setFont('helvetica', 'italic');
     pdf.setFontSize(8);
     pdf.setTextColor(180, 83, 9);
-    pdf.text(`Note: only the latest ${fines.length} fines are included. Narrow the date range for a complete report.`, M, 51.5);
+    pdf.text(`Note: only the latest ${spec.rows.length} fines are included. Narrow the date range for a complete report.`, M, 51.5);
   }
 
   // ---------- Table ----------
-  const cols = [
-    { title: '#', w: 10 },
-    { title: 'Date', w: 26 },
-    { title: 'Emp ID', w: 24 },
-    { title: 'Employee Name', w: 48 },
-    { title: 'Department', w: 40 },
-    { title: 'Designation', w: 38 },
-    { title: 'Amount', w: 26, right: true },
-    { title: 'Reason', w: 0 },
-  ];
+  const cols = spec.columns.map((c) => ({ ...c }));
   const fixed = cols.reduce((s, c) => s + c.w, 0);
-  cols[cols.length - 1].w = W - M * 2 - fixed;
+  const flex = cols.find((c) => c.w === 0);
+  if (flex) flex.w = W - M * 2 - fixed;
 
   const LINE = 4;
   const PAD = 2;
-  let y = opts.truncated ? 56 : 53;
+  let y = spec.truncated ? 56 : 53;
 
   const drawHeader = () => {
     pdf.setFillColor(241, 245, 249);
@@ -122,23 +118,13 @@ export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: 
   drawHeader();
   pdf.setFontSize(8.5);
 
-  if (fines.length === 0) {
+  if (spec.rows.length === 0) {
     pdf.setFont('helvetica', 'italic');
     pdf.setTextColor(100, 116, 139);
     pdf.text('No fines recorded in this period.', M + PAD, y + 7);
   }
 
-  fines.forEach((f, idx) => {
-    const cells = [
-      String(idx + 1),
-      safe(formatISTDate(f.date || f.created_at)),
-      safe(f.emp_id || '—'),
-      safe(f.employee?.full_name || 'Unknown'),
-      safe(f.employee?.department || '—'),
-      safe(f.employee?.designation || '—'),
-      rs(amountOf(f.fine_amount)),
-      safe(f.reason || '—'),
-    ];
+  spec.rows.forEach((cells, idx) => {
     pdf.setFont('helvetica', 'normal');
     const wrapped = cells.map((txt, i) => pdf.splitTextToSize(txt, cols[i].w - PAD * 2) as string[]);
     const rowH = Math.max(...wrapped.map((l) => l.length)) * LINE + PAD * 2;
@@ -156,7 +142,7 @@ export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: 
     let x = M;
     wrapped.forEach((lines, i) => {
       const c = cols[i];
-      if (i === 6) {
+      if (c.amount) {
         pdf.setFont('helvetica', 'bold');
         pdf.setTextColor(...BRAND);
       } else {
@@ -178,10 +164,94 @@ export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: 
     pdf.setFont('helvetica', 'normal');
     pdf.setFontSize(8);
     pdf.setTextColor(148, 163, 184);
-    pdf.text('Health & Safety - Fine Report', M, H - 6);
+    pdf.text(spec.footer, M, H - 6);
     pdf.text(`Page ${p} of ${pages}`, W - M, H - 6, { align: 'right' });
   }
 
-  const stamp = (range.from || 'all') + (range.to ? `_to_${range.to}` : '');
-  pdf.save(`Safety_Fines_${stamp}.pdf`);
+  const stamp = (spec.range.from || 'all') + (spec.range.to ? `_to_${spec.range.to}` : '');
+  pdf.save(`${spec.filePrefix}_${stamp}.pdf`);
+};
+
+const countRepeat = (keys: string[]) => {
+  const m = new Map<string, number>();
+  keys.forEach((k) => m.set(k, (m.get(k) || 0) + 1));
+  return { unique: m.size, repeat: Array.from(m.values()).filter((c) => c > 1).length };
+};
+
+/** Employee fines report — one row per fine. */
+export const exportFinesPDF = (fines: SafetyFine[], range: FineDateRange, opts: { truncated?: boolean } = {}) => {
+  const total = fines.reduce((s, f) => s + amountOf(f.fine_amount), 0);
+  const { unique, repeat } = countRepeat(fines.map((f) => f.emp_id || '—'));
+  buildReport({
+    title: 'SKA Ispat - Safety Fine Report',
+    footer: 'Health & Safety - Fine Report',
+    filePrefix: 'Safety_Fines',
+    range,
+    truncated: opts.truncated,
+    summary: [
+      ['Total Fines', String(fines.length)],
+      ['Total Amount', rs(total), true],
+      ['Employees Fined', String(unique)],
+      ['Repeat Offenders', String(repeat), true],
+    ],
+    columns: [
+      { title: '#', w: 10 },
+      { title: 'Date', w: 26 },
+      { title: 'Emp ID', w: 24 },
+      { title: 'Employee Name', w: 48 },
+      { title: 'Department', w: 40 },
+      { title: 'Designation', w: 38 },
+      { title: 'Amount', w: 26, right: true, amount: true },
+      { title: 'Reason', w: 0 },
+    ],
+    rows: fines.map((f, idx) => [
+      String(idx + 1),
+      safe(formatISTDate(f.date || f.created_at)),
+      safe(f.emp_id || '—'),
+      safe(f.employee?.full_name || 'Unknown'),
+      safe(f.employee?.department || '—'),
+      safe(f.employee?.designation || '—'),
+      rs(amountOf(f.fine_amount)),
+      safe(f.reason || '—'),
+    ]),
+  });
+};
+
+/** Contractor fines report — one row per fine. */
+export const exportContractorFinesPDF = (fines: ContractorFine[], range: FineDateRange, opts: { truncated?: boolean } = {}) => {
+  const total = fines.reduce((s, f) => s + amountOf(f.fine_amount), 0);
+  const { unique, repeat } = countRepeat(fines.map((f) => String(f.con_id ?? '—')));
+  buildReport({
+    title: 'SKA Ispat - Contractor Safety Fine Report',
+    footer: 'Health & Safety - Contractor Fine Report',
+    filePrefix: 'Contractor_Safety_Fines',
+    range,
+    truncated: opts.truncated,
+    summary: [
+      ['Total Fines', String(fines.length)],
+      ['Total Amount', rs(total), true],
+      ['Contractors Fined', String(unique)],
+      ['Repeat Contractors', String(repeat), true],
+    ],
+    columns: [
+      { title: '#', w: 10 },
+      { title: 'Date', w: 26 },
+      { title: 'Contractor', w: 50 },
+      { title: 'Department', w: 38 },
+      { title: 'Phone', w: 28 },
+      { title: 'Worker Name', w: 42 },
+      { title: 'Amount', w: 26, right: true, amount: true },
+      { title: 'Reason', w: 0 },
+    ],
+    rows: fines.map((f, idx) => [
+      String(idx + 1),
+      safe(formatISTDate(f.date || f.created_at)),
+      safe(f.contractor?.contractor_name || 'Unknown'),
+      safe(f.contractor?.department || '—'),
+      safe(f.contractor?.phone_number || '—'),
+      safe(f.emp_name || '—'),
+      rs(amountOf(f.fine_amount)),
+      safe(f.reason || '—'),
+    ]),
+  });
 };

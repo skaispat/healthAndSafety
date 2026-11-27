@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Camera, ImagePlus, IndianRupee, Loader2, X, AlertCircle, Search, ChevronRight } from 'lucide-react';
+import { IndianRupee, Loader2, AlertCircle, Search, ChevronRight } from 'lucide-react';
+import { FineEvidenceImageField } from './FineEvidenceImageField';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -72,12 +73,10 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: 
   const [amount, setAmount] = useState('');
   const [reason, setReason] = useState('');
   const [image, setImage] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
   const [errors, setErrors] = useState<{ amount?: string; reason?: string; image?: string; form?: string }>({});
   const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
-  const cameraRef = useRef<HTMLInputElement>(null);
-  const galleryRef = useRef<HTMLInputElement>(null);
+  const [imageBusy, setImageBusy] = useState(false); // HEIC conversion in progress
 
   // Reset form whenever a new employee is selected
   useEffect(() => {
@@ -89,34 +88,16 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: 
     submittingRef.current = false;
   }, [employee?.emp_id, isOpen]);
 
-  // Manage preview object URL lifecycle (avoid memory leaks)
-  useEffect(() => {
-    if (!image) {
-      setPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(image);
-    setPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [image]);
 
   const handleClose = () => {
     if (submittingRef.current) return; // block closing mid-submit
     onClose();
   };
 
-  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0] || null;
-    e.target.value = '';
-    if (!file) return;
-    const err = validateFineImage(file);
-    setErrors((p) => ({ ...p, image: err || undefined }));
-    if (!err) setImage(file);
-  };
 
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault();
-    if (!employee || submittingRef.current) return;
+    if (!employee || submittingRef.current || imageBusy) return;
 
     const amt = validateFineAmount(amount);
     const trimmedReason = reason.trim();
@@ -251,7 +232,7 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: 
           <button type="button" className="btn btn-secondary" onClick={handleClose} disabled={submitting}>
             Cancel
           </button>
-          <button type="submit" form="mark-fine-form" className="btn btn-primary" disabled={submitting}>
+          <button type="submit" form="mark-fine-form" className="btn btn-primary" disabled={submitting || imageBusy}>
             {submitting ? (
               <>
                 <Loader2 size={16} className="spin" /> Saving...
@@ -338,49 +319,14 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: 
           </div>
         </div>
 
-        <div className="form-group" style={{ marginBottom: 0 }}>
-          <span className="form-label">
-            Evidence Image <span className="required">*</span>
-          </span>
-
-          {preview ? (
-            <div className="fine-image-preview">
-              <img src={preview} alt="Fine evidence preview" />
-              {!submitting && (
-                <button
-                  type="button"
-                  className="fine-image-remove"
-                  onClick={() => setImage(null)}
-                  aria-label="Remove image"
-                >
-                  <X size={16} />
-                </button>
-              )}
-            </div>
-          ) : (
-            <div className="fine-image-actions">
-              <button type="button" className="btn btn-outline" onClick={() => cameraRef.current?.click()} disabled={submitting}>
-                <Camera size={16} /> Take Photo
-              </button>
-              <button type="button" className="btn btn-outline" onClick={() => galleryRef.current?.click()} disabled={submitting}>
-                <ImagePlus size={16} /> Choose Image
-              </button>
-            </div>
-          )}
-          <input ref={cameraRef} type="file" accept="image/*" capture="environment" hidden onChange={handleFile} />
-          <input
-            ref={galleryRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif"
-            hidden
-            onChange={handleFile}
-          />
-          {errors.image ? (
-            <span className="fine-field-error">{errors.image}</span>
-          ) : (
-            <span className="form-hint">JPG, PNG, WebP or HEIC · max 10 MB</span>
-          )}
-        </div>
+        <FineEvidenceImageField
+          image={image}
+          onChange={setImage}
+          error={errors.image}
+          onError={(msg) => setErrors((p) => ({ ...p, image: msg }))}
+          disabled={submitting}
+          onBusyChange={setImageBusy}
+        />
       </form>
     </Modal>
   );
