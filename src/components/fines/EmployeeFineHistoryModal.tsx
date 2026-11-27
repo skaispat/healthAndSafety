@@ -64,7 +64,8 @@ export const EmployeeFineHistoryModal: React.FC<Props> = ({ empId, refreshKey = 
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!employee || loading}
+            disabled={!employee || loading || employee.is_active === false}
+            title={employee?.is_active === false ? 'Inactive employees cannot be fined' : undefined}
             onClick={() => employee && onMarkFine(employee)}
           >
             <Gavel size={16} /> Mark Fine Again
@@ -82,6 +83,12 @@ export const EmployeeFineHistoryModal: React.FC<Props> = ({ empId, refreshKey = 
         <div className="fine-empty fine-empty-error">Employee record not found.</div>
       ) : (
         <>
+          {employee.is_active === false && (
+            <div className="emp-inactive-alert" role="status">
+              <AlertTriangle size={16} />
+              <span>This employee is <strong>inactive</strong>. New fines cannot be marked; past fines are shown for reference.</span>
+            </div>
+          )}
           {thisMonth > 1 && (
             <div className="fine-repeat-alert" role="status">
               <AlertTriangle size={16} />

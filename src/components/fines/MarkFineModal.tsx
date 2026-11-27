@@ -188,7 +188,7 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: 
         </div>
 
         {pickTerm.length < FINE_LIMITS.SEARCH_MIN_CHARS ? (
-          <div className="fine-empty">Type at least {FINE_LIMITS.SEARCH_MIN_CHARS} characters to search.</div>
+          <div className="fine-empty">Type an Employee ID, name or phone number to search.</div>
         ) : picking && pickResults.length === 0 ? (
           <div className="fine-empty">
             <Loader2 size={18} className="spin" /> Searching...
@@ -200,7 +200,14 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: 
         ) : (
           <div className="fine-pick-list" aria-busy={picking}>
             {pickResults.map((emp) => (
-              <button key={emp.emp_id} type="button" className="fine-pick-item" onClick={() => setEmployee(emp)}>
+              <button
+                key={emp.emp_id}
+                type="button"
+                className={`fine-pick-item ${emp.is_active === false ? 'emp-row-disabled' : ''}`}
+                onClick={() => emp.is_active !== false && setEmployee(emp)}
+                disabled={emp.is_active === false}
+                title={emp.is_active === false ? 'Inactive employees cannot be fined' : undefined}
+              >
                 <div className="fine-avatar">{(emp.full_name || '?').trim().charAt(0).toUpperCase()}</div>
                 <div style={{ minWidth: 0, flex: 1, textAlign: 'left' }}>
                   <div className="fine-employee-name">{emp.full_name}</div>

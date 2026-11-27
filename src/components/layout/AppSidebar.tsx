@@ -12,7 +12,8 @@ import {
   X,
   ShieldCheck,
   GraduationCap,
-  Gavel
+  Gavel,
+  HardHat
 } from 'lucide-react';
 import { canManageFines } from '../../utils/access';
 
@@ -140,6 +141,14 @@ export const AppSidebar: React.FC<AppSidebarProps> = ({ isOpen, onClose }) => {
             <NavLink to="/fines" className={navLinkClass} onClick={onClose}>
               <Gavel size={18} color="#b91c1c" />
               <span>Fine (Penalty)</span>
+            </NavLink>
+          )}
+
+          {/* PPE Issue - Health & Safety / Super Admin */}
+          {canManageFines(currentUser) && (
+            <NavLink to="/ppe" className={navLinkClass} onClick={onClose}>
+              <HardHat size={18} color="#d97706" />
+              <span>PPE Issue</span>
             </NavLink>
           )}
 

@@ -255,3 +255,45 @@ export const exportContractorFinesPDF = (fines: ContractorFine[], range: FineDat
     ]),
   });
 };
+
+/** PPE issue register — one row per issue record. */
+export const exportPpePDF = (
+  issues: import('../services/ppeService').PpeIssue[],
+  range: FineDateRange,
+  opts: { truncated?: boolean } = {}
+) => {
+  const totalQty = issues.reduce((s, r) => s + r.items.reduce((q, i) => q + i.qty, 0), 0);
+  const employees = new Set(issues.map((r) => r.emp_id || '—')).size;
+  const itemTypes = new Set(issues.flatMap((r) => r.items.map((i) => i.item.toLowerCase()))).size;
+  buildReport({
+    title: 'SKA Ispat - PPE Issue Register',
+    footer: 'Health & Safety - PPE Issue Register',
+    filePrefix: 'PPE_Issue_Register',
+    range,
+    truncated: opts.truncated,
+    summary: [
+      ['Issue Records', String(issues.length)],
+      ['Total Qty Issued', String(totalQty), true],
+      ['Employees', String(employees)],
+      ['Item Types', String(itemTypes)],
+    ],
+    columns: [
+      { title: '#', w: 10 },
+      { title: 'Issue Date', w: 26 },
+      { title: 'Emp ID', w: 24 },
+      { title: 'Employee Name', w: 50 },
+      { title: 'Department', w: 42 },
+      { title: 'Qty', w: 16, right: true, amount: true },
+      { title: 'Items Issued', w: 0 },
+    ],
+    rows: issues.map((r, idx) => [
+      String(idx + 1),
+      safe(formatISTDate(r.issue_date || r.created_at)),
+      safe(r.emp_id || '—'),
+      safe(r.employee?.full_name || 'Unknown'),
+      safe(r.employee?.department || '—'),
+      String(r.items.reduce((q, i) => q + i.qty, 0)),
+      safe(r.items.map((i) => `${i.item} x ${i.qty}${i.size ? ` (Size ${i.size})` : ''}${i.color ? ` (${i.color})` : ''}`).join(', ') || '—'),
+    ]),
+  });
+};

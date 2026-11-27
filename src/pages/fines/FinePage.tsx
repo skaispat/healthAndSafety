@@ -371,7 +371,11 @@ export const FinePage: React.FC = () => {
           ) : (
             <div className="fine-employee-grid" aria-busy={searching}>
               {results.map((emp) => (
-                <div key={emp.emp_id} className="ehs-card fine-employee-card">
+                <div
+                  key={emp.emp_id}
+                  className={`ehs-card fine-employee-card ${emp.is_active === false ? 'emp-row-disabled' : ''}`}
+                  aria-disabled={emp.is_active === false}
+                >
                   <div className="fine-employee-head">
                     <div className="fine-avatar">{(emp.full_name || '?').trim().charAt(0).toUpperCase()}</div>
                     <div style={{ minWidth: 0, flex: 1 }}>
@@ -397,7 +401,13 @@ export const FinePage: React.FC = () => {
                     <button type="button" className="btn btn-outline" onClick={() => openHistory(emp.emp_id)}>
                       <Eye size={16} /> History
                     </button>
-                    <button type="button" className="btn btn-primary" onClick={() => openFineModal(emp)}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      onClick={() => openFineModal(emp)}
+                      disabled={emp.is_active === false}
+                      title={emp.is_active === false ? 'Inactive employees cannot be fined' : undefined}
+                    >
                       <Gavel size={16} /> Mark Fine
                     </button>
                   </div>

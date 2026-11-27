@@ -17,7 +17,7 @@ export const FINE_LIMITS = {
   MIN_REASON_LENGTH: 3,
   MAX_IMAGE_BYTES: 10 * 1024 * 1024, // raw file limit before compression
   ALLOWED_IMAGE_TYPES: ['image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/heic', 'image/heif'],
-  SEARCH_MIN_CHARS: 2,
+  SEARCH_MIN_CHARS: 1, // 1 so single-digit Employee IDs (e.g. "1") are searchable
   SEARCH_MAX_CHARS: 50,
   SEARCH_LIMIT: 25,
   PAGE_SIZE: 20,
@@ -89,6 +89,10 @@ export const validateFineAmount = (raw: string): { value?: string; error?: strin
  * HEIC/HEIF detection. Windows/Chrome often report an EMPTY mime type for .heic files,
  * so the file extension is checked as well.
  */
+/** users2.is_active defaults to true; only an explicit `false` means inactive. */
+export const isInactiveEmployee = (emp: { is_active?: boolean | null } | null | undefined): boolean =>
+  emp?.is_active === false;
+
 export const isHeicFile = (file: File): boolean =>
   /^image\/hei[cf](-sequence)?$/i.test(file.type || '') || /\.(heic|heif)$/i.test(file.name || '');
 
@@ -196,10 +200,10 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 export const monthStartIST = (): string => `${todayIST().slice(0, 8)}01`;
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const applyDateRange = <Q extends { gte: any; lte: any }>(query: Q, range: FineDateRange): Q => {
+export const applyDateRange = <Q extends { gte: any; lte: any }>(query: Q, range: FineDateRange, column = 'date'): Q => {
   let q = query;
-  if (range.from && ISO_DATE.test(range.from)) q = q.gte('date', range.from);
-  if (range.to && ISO_DATE.test(range.to)) q = q.lte('date', range.to);
+  if (range.from && ISO_DATE.test(range.from)) q = q.gte(column, range.from);
+  if (range.to && ISO_DATE.test(range.to)) q = q.lte(column, range.to);
   return q;
 };
 
@@ -227,19 +231,56 @@ export const FineService = {
     const client = requireClient();
 
     const pattern = `"%${term}%"`;
-    const { data, error } = await client
-      .from('users2')
-      .select(EMPLOYEE_COLUMNS)
-      .or(`emp_id.ilike.${pattern},full_name.ilike.${pattern},phone_number.ilike.${pattern}`)
-      .order('full_name', { ascending: true })
-      .limit(FINE_LIMITS.SEARCH_LIMIT);
+    // Two queries in parallel:
+    //  1) exact emp_id match (so typing "12" always finds employee 12, even with many partial matches)
+    //  2) emp_id / name / phone partial matches (wider net so ranking has enough candidates)
+    const [exactRes, partialRes] = await Promise.all([
+      client.from('users2').select(EMPLOYEE_COLUMNS).eq('emp_id', term).limit(1),
+      client
+        .from('users2')
+        .select(EMPLOYEE_COLUMNS)
+        .or(`emp_id.ilike.${pattern},full_name.ilike.${pattern},phone_number.ilike.${pattern}`)
+        .limit(FINE_LIMITS.SEARCH_LIMIT * 4),
+    ]);
 
-    if (error) {
-      console.error('Employee search failed:', error);
+    if (partialRes.error && exactRes.error) {
+      console.error('Employee search failed:', partialRes.error);
       throw new Error('Employee search failed. Please try again.');
     }
 
-    const rows = (data || []) as Omit<FineEmployee, 'hod_name'>[];
+    // Merge (exact first), de-duplicate, then rank by relevance
+    const seen = new Set<string>();
+    const merged = [...(exactRes.data || []), ...(partialRes.data || [])].filter((r: any) => {
+      const id = String(r.emp_id);
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    }) as Omit<FineEmployee, 'hod_name'>[];
+
+    const t = term.toLowerCase();
+    const rank = (r: Omit<FineEmployee, 'hod_name'>): number => {
+      const id = String(r.emp_id).toLowerCase();
+      const name = (r.full_name || '').toLowerCase();
+      const phone = (r.phone_number || '').replace(/\D/g, '');
+      if (id === t) return 0; // exact Employee ID
+      if (id.startsWith(t)) return 1; // ID prefix ("23" -> 235)
+      if (name.startsWith(t) || name.split(/\s+/).some((w) => w.startsWith(t))) return 2; // name / word starts with
+      if (phone && phone.endsWith(t.replace(/\D/g, '')) && /\d{4,}/.test(t)) return 3; // phone last digits
+      if (id.includes(t)) return 4;
+      if (name.includes(t)) return 5;
+      return 6; // phone contains
+    };
+    const rows = merged
+      .sort((a, b) => {
+        const d = rank(a) - rank(b);
+        if (d !== 0) return d;
+        // Numeric IDs: shorter / smaller first (12 before 120); otherwise by name
+        const an = Number(a.emp_id);
+        const bn = Number(b.emp_id);
+        if (Number.isFinite(an) && Number.isFinite(bn) && an !== bn) return an - bn;
+        return (a.full_name || '').localeCompare(b.full_name || '');
+      })
+      .slice(0, FINE_LIMITS.SEARCH_LIMIT);
     const hodMap = await fetchHodNames(rows.map((r) => r.hod_id || ''));
     return rows.map((r) => ({
       ...r,
@@ -447,14 +488,18 @@ export const FineService = {
     const imgErr = validateFineImage(input.image);
     if (imgErr) throw new Error(imgErr);
 
-    // Confirm employee still exists (FK would also reject, but this gives a clear message)
-    const { data: emp, error: empErr } = await client
+    // Confirm employee exists and is active (FK would also reject a missing one, but this gives a clear message)
+    const { data: empRow, error: empErr } = await client
       .from('users2')
-      .select('emp_id, full_name, department, designation')
+      .select('emp_id, full_name, department, designation, is_active')
       .eq('emp_id', empId)
       .maybeSingle();
     if (empErr) throw new Error('Could not verify employee. Please try again.');
-    if (!emp) throw new Error('Employee record not found.');
+    if (!empRow) throw new Error('Employee record not found.');
+    if (empRow.is_active === false) {
+      throw new Error(`${empRow.full_name || 'This employee'} is inactive. Fines cannot be marked for inactive employees.`);
+    }
+    const { is_active: _active, ...emp } = empRow;
 
     const { url, path } = await this.uploadFineImage(input.image, empId);
 

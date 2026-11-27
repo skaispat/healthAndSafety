@@ -20,6 +20,7 @@ import { ReportsPage } from './pages/reports/ReportsPage';
 import { NotificationsPage } from './pages/notifications/NotificationsPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { FinePage } from './pages/fines/FinePage';
+import { PpeIssuePage } from './pages/ppe/PpeIssuePage';
 import { canManageFines } from './utils/access';
 
 const MainLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -173,6 +174,16 @@ export const AppRoutes: React.FC = () => {
         element={
           <MainLayout>
             {canManageFines(currentUser) ? <FinePage /> : <Navigate to="/" replace />}
+          </MainLayout>
+        }
+      />
+
+      {/* PPE Issue - Health & Safety / Super Admin only */}
+      <Route
+        path="/ppe"
+        element={
+          <MainLayout>
+            {canManageFines(currentUser) ? <PpeIssuePage /> : <Navigate to="/" replace />}
           </MainLayout>
         }
       />
