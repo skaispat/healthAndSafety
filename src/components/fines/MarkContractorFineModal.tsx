@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { IndianRupee, Loader2, AlertCircle } from 'lucide-react';
 import { FineEvidenceImageField } from './FineEvidenceImageField';
+import { PpeHistoryPanel } from '../ppe/PpeHistoryPanel';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import { FINE_LIMITS, validateFineAmount, validateFineImage } from '../../services/fineService';
@@ -235,6 +236,9 @@ export const MarkContractorFineModal: React.FC<Props> = ({
             This contractor has no phone number, so no WhatsApp notice can be sent.
           </div>
         )}
+
+        {/* PPE issued to this contractor (ppe_issue.contracto_id), for reference before fining */}
+        {selected && <PpeHistoryPanel conId={selected.id} />}
 
         <div className="form-group">
           <label className="form-label" htmlFor="cf-emp">

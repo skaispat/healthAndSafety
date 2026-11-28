@@ -17,6 +17,10 @@ import {
 } from '../types/database';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
+/** Deployed slug of supabase/functions/observation-whatsapp. */
+const OBSERVATION_WHATSAPP_FUNCTION = 'observation';
+export type WhatsAppResult = { sent: boolean; error?: string };
+
 // Event emitter pattern for reactive updates
 type Listener = () => void;
 const listeners: Set<Listener> = new Set();
@@ -779,7 +783,7 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
     officer_id: string | number; // creator's emp_id
     initialStatus?: ObservationStatus;
     corrective_action?: string;
-  }): Promise<{ observation: Observation; task: Task }> {
+  }): Promise<{ observation: Observation; task: Task; whatsapp?: Promise<WhatsAppResult> }> {
     const now = new Date().toISOString();
     const obsId = crypto.randomUUID();
     const existingList = await this.getObservations();
@@ -999,6 +1003,8 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
       });
     }
 
+    let observationSaved = false;
+
     // Supabase push directly into unified tables
     if (isSupabaseConfigured() && supabase) {
       try {
@@ -1028,6 +1034,8 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
 
         if (obsInsertErr) {
           console.error('Supabase insert observation error:', obsInsertErr);
+        } else {
+          observationSaved = true;
         }
 
         if (photos.length > 0) {
@@ -1117,7 +1125,43 @@ const isBoilerplateRemark = (text?: string | null): boolean => {
     const storedNotifs = getStored<Notification[]>(STORAGE_KEYS.NOTIFICATIONS, []);
     setStored(STORAGE_KEYS.NOTIFICATIONS, [...notificationsToDispatch, ...storedNotifs]);
 
-    return { observation: newObservation, task: taskObj };
+    // WhatsApp the assignee (fire-and-forget; never blocks or fails the creation).
+    // Only for newly assigned work that was actually saved to the database.
+    const whatsapp =
+      observationSaved && targetStatus === 'ASSIGNED' && Number.isFinite(assignedToNum) && assignedToNum !== createdByNum
+        ? this.sendObservationWhatsApp(obsId)
+        : undefined;
+
+    return { observation: newObservation, task: taskObj, whatsapp };
+  },
+
+  /** Invoke the 'observation' edge function: WhatsApp the assignee their observation details. */
+  async sendObservationWhatsApp(observationId: string): Promise<WhatsAppResult> {
+    if (!isSupabaseConfigured() || !supabase) return { sent: false, error: 'Supabase is not configured' };
+    try {
+      const { data, error } = await supabase.functions.invoke(OBSERVATION_WHATSAPP_FUNCTION, {
+        body: { observation_id: observationId },
+      });
+      if (error) {
+        let msg = error.message;
+        try {
+          const ctx = (error as any).context;
+          if (ctx && typeof ctx.json === 'function') {
+            const body = await ctx.json();
+            if (body?.error) msg = body.error;
+          }
+        } catch {
+          /* ignore */
+        }
+        console.warn('Observation WhatsApp not sent:', msg);
+        return { sent: false, error: msg };
+      }
+      if (data?.success) return { sent: true };
+      return { sent: false, error: data?.error || 'Unknown response' };
+    } catch (err: any) {
+      console.warn('Observation WhatsApp not sent:', err);
+      return { sent: false, error: err?.message || 'Network error' };
+    }
   },
 
   // Personal Observation Workflow (Officer self-log)

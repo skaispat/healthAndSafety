@@ -68,16 +68,28 @@ export interface PpeEmployee {
   is_active?: boolean | null;
 }
 
+export interface PpeContractor {
+  id: number;
+  contractor_name: string | null;
+  department: string | null;
+  phone_number: string | null;
+}
+
+/** Employee records have emp_id; contractor records have contracto_id (emp_id left blank). */
+export type PpeKind = 'employee' | 'contractor';
+
 export interface PpeIssue {
   id: number;
   created_at: string;
   emp_id: string | null;
+  contracto_id: number | null;
   issue_date: string | null;
   items: PpeItem[];
   employee: PpeEmployee | null;
+  contractor: PpeContractor | null;
 }
 
-const COLUMNS = 'id, created_at, emp_id, issue_date, issued_ppe';
+const COLUMNS = 'id, created_at, emp_id, contracto_id, issue_date, issued_ppe';
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
@@ -171,23 +183,35 @@ export const validatePpeItems = (
 
 const attachEmployees = async (rows: any[]): Promise<PpeIssue[]> => {
   const client = requireClient();
-  const ids = Array.from(new Set(rows.map((r) => r.emp_id).filter(Boolean))) as string[];
-  const map = new Map<string, PpeEmployee>();
-  for (let i = 0; i < ids.length; i += 200) {
+  const empIds = Array.from(new Set(rows.map((r) => r.emp_id).filter(Boolean))) as string[];
+  const conIds = Array.from(new Set(rows.map((r) => r.contracto_id).filter((v) => v != null))).map(Number);
+  const empMap = new Map<string, PpeEmployee>();
+  const conMap = new Map<number, PpeContractor>();
+  for (let i = 0; i < empIds.length; i += 200) {
     const { data, error } = await client
       .from('users2')
       .select('emp_id, full_name, department, designation, is_active')
-      .in('emp_id', ids.slice(i, i + 200));
+      .in('emp_id', empIds.slice(i, i + 200));
     if (error) console.warn('Unable to resolve employees for PPE:', error.message);
-    (data || []).forEach((e: any) => map.set(String(e.emp_id), { ...e, emp_id: String(e.emp_id) }));
+    (data || []).forEach((e: any) => empMap.set(String(e.emp_id), { ...e, emp_id: String(e.emp_id) }));
+  }
+  for (let i = 0; i < conIds.length; i += 200) {
+    const { data, error } = await client
+      .from('contractor')
+      .select('id, contractor_name, department, phone_number')
+      .in('id', conIds.slice(i, i + 200));
+    if (error) console.warn('Unable to resolve contractors for PPE:', error.message);
+    (data || []).forEach((c: any) => conMap.set(Number(c.id), c));
   }
   return rows.map((r) => ({
     id: r.id,
     created_at: r.created_at,
     emp_id: r.emp_id,
+    contracto_id: r.contracto_id != null ? Number(r.contracto_id) : null,
     issue_date: r.issue_date,
     items: parseIssuedPpe(r.issued_ppe),
-    employee: r.emp_id ? map.get(String(r.emp_id)) || null : null,
+    employee: r.emp_id ? empMap.get(String(r.emp_id)) || null : null,
+    contractor: r.contracto_id != null ? conMap.get(Number(r.contracto_id)) || null : null,
   }));
 };
 
@@ -214,14 +238,49 @@ const assertActiveEmployee = async (empId: string) => {
   }
 };
 
+const validateBase = (issueDate: string, items: PpeItem[]) => {
+  if (!ISO_DATE.test(issueDate)) throw new Error('Please select a valid issue date.');
+  if (issueDate > todayIST()) throw new Error('Issue date cannot be in the future.');
+  if (!items.length) throw new Error('Add at least one PPE item.');
+  if (items.length > PPE_LIMITS.MAX_ITEMS) throw new Error(`Maximum ${PPE_LIMITS.MAX_ITEMS} items per issue.`);
+};
+
+const assertContractor = async (conId: number) => {
+  if (!Number.isSafeInteger(conId) || conId <= 0) throw new Error('Please select a contractor.');
+  const client = requireClient();
+  const { data, error } = await client.from('contractor').select('id').eq('id', conId).maybeSingle();
+  if (error) throw new Error('Could not verify contractor. Please try again.');
+  if (!data) throw new Error('Contractor record not found.');
+};
+
+/** Latest PPE issues for one person (used by the fine forms). */
+const historyFor = async (column: 'emp_id' | 'contracto_id', value: string | number, limit: number) => {
+  const client = requireClient();
+  const { data, error } = await client
+    .from('ppe_issue')
+    .select(COLUMNS)
+    .eq(column, value)
+    .order('issue_date', { ascending: false, nullsFirst: false })
+    .order('id', { ascending: false })
+    .limit(limit);
+  if (error) {
+    console.warn('PPE history failed:', error.message);
+    throw new Error('Could not load issued PPE.');
+  }
+  return { issues: await attachEmployees(data || []) };
+};
+
 export const PpeService = {
   /** All PPE issues in range (batched; capped at EXPORT_MAX). Latest first. */
-  async list(range: FineDateRange = {}): Promise<{ issues: PpeIssue[]; truncated: boolean }> {
+  async list(range: FineDateRange = {}, kind: PpeKind = 'employee'): Promise<{ issues: PpeIssue[]; truncated: boolean }> {
     const client = requireClient();
     const rows: any[] = [];
     let truncated = false;
     for (let offset = 0; ; offset += FINE_LIMITS.BATCH_SIZE) {
-      const { data, error } = await applyDateRange(client.from('ppe_issue').select(COLUMNS), range, 'issue_date')
+      // Each tab shows only its own records: employees have emp_id, contractors have contracto_id
+      const scopeColumn = kind === 'contractor' ? 'contracto_id' : 'emp_id';
+      const scoped = client.from('ppe_issue').select(COLUMNS).not(scopeColumn, 'is', null);
+      const { data, error } = await applyDateRange(scoped, range, 'issue_date')
         .order('issue_date', { ascending: false, nullsFirst: false })
         .order('id', { ascending: false })
         .range(offset, offset + FINE_LIMITS.BATCH_SIZE - 1);
@@ -247,6 +306,9 @@ export const PpeService = {
       issue.employee?.full_name,
       issue.employee?.department,
       issue.employee?.designation,
+      issue.contractor?.contractor_name,
+      issue.contractor?.department,
+      issue.contractor?.phone_number,
       ...issue.items.map((i) => `${i.item} ${i.color || ''} ${i.size ? `size ${i.size}` : ''}`),
     ];
     return hay.some((v) => (v || '').toLowerCase().includes(term));
@@ -290,6 +352,55 @@ export const PpeService = {
     }
     if (!data) throw new Error('This record no longer exists (it may have been deleted).');
     return (await attachEmployees([data]))[0];
+  },
+
+  /** Issue PPE to a contractor: contracto_id set, emp_id left blank. */
+  async createForContractor(input: { contracto_id: number; issue_date: string; items: PpeItem[] }): Promise<PpeIssue> {
+    validateBase(input.issue_date, input.items);
+    await assertContractor(Number(input.contracto_id));
+    const client = requireClient();
+    const { data, error } = await client
+      .from('ppe_issue')
+      .insert({ contracto_id: Number(input.contracto_id), emp_id: null, issue_date: input.issue_date, issued_ppe: input.items })
+      .select(COLUMNS)
+      .single();
+    if (error || !data) {
+      console.error('Contractor PPE insert failed:', error);
+      throw new Error(error?.message ? `Could not save PPE issue: ${error.message}` : 'Could not save PPE issue.');
+    }
+    return (await attachEmployees([data]))[0];
+  },
+
+  async updateForContractor(id: number, input: { contracto_id: number; issue_date: string; items: PpeItem[] }): Promise<PpeIssue> {
+    if (!Number.isSafeInteger(id) || id <= 0) throw new Error('Invalid record.');
+    validateBase(input.issue_date, input.items);
+    await assertContractor(Number(input.contracto_id));
+    const client = requireClient();
+    const { data, error } = await client
+      .from('ppe_issue')
+      .update({ contracto_id: Number(input.contracto_id), emp_id: null, issue_date: input.issue_date, issued_ppe: input.items })
+      .eq('id', id)
+      .select(COLUMNS)
+      .maybeSingle();
+    if (error) {
+      console.error('Contractor PPE update failed:', error);
+      throw new Error(`Could not update PPE issue: ${error.message}`);
+    }
+    if (!data) throw new Error('This record no longer exists (it may have been deleted).');
+    return (await attachEmployees([data]))[0];
+  },
+
+  /** PPE issued to an employee (latest first) — shown while marking a fine. */
+  async getEmployeeHistory(empId: string, limit = 20): Promise<PpeIssue[]> {
+    const id = String(empId || '').trim();
+    if (!id) return [];
+    return (await historyFor('emp_id', id, limit)).issues;
+  },
+
+  /** PPE issued to a contractor (latest first) — shown while marking a contractor fine. */
+  async getContractorHistory(conId: number, limit = 20): Promise<PpeIssue[]> {
+    if (!Number.isSafeInteger(conId) || conId <= 0) return [];
+    return (await historyFor('contracto_id', conId, limit)).issues;
   },
 
   async remove(id: number): Promise<void> {

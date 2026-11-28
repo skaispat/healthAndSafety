@@ -178,7 +178,7 @@ export const CreateObservationPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      await DataService.createObservationWithTask({
+      const created = await DataService.createObservationWithTask({
         department_id: Number(departmentId),
         area: area.trim(),
         observation_text: observationText.trim(),
@@ -188,6 +188,17 @@ export const CreateObservationPage: React.FC = () => {
         priority,
         photo_urls: photos.map((p) => ({ url: p.url, file_name: p.file_name })),
         officer_id: currentUser.emp_id,
+      });
+
+      // WhatsApp to the assignee runs in the background; warn only if it fails.
+      created.whatsapp?.then((wa) => {
+        if (!wa.sent) {
+          showToast({
+            type: 'warning',
+            title: 'WhatsApp Not Sent',
+            message: `Observation was created, but the WhatsApp message could not be sent: ${wa.error || 'unknown error'}`,
+          });
+        }
       });
 
       showToast({

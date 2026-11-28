@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { IndianRupee, Loader2, AlertCircle, Search, ChevronRight } from 'lucide-react';
 import { FineEvidenceImageField } from './FineEvidenceImageField';
+import { PpeHistoryPanel } from '../ppe/PpeHistoryPanel';
 import { Modal } from '../common/Modal';
 import { useToast } from '../../context/ToastContext';
 import {
@@ -268,6 +269,9 @@ export const MarkFineModal: React.FC<MarkFineModalProps> = ({ isOpen, employee: 
             </button>
           )}
         </div>
+
+        {/* PPE issued to this employee (from ppe_issue), for reference before fining */}
+        <PpeHistoryPanel empId={employee.emp_id} />
 
         {errors.form && (
           <div className="fine-form-error" role="alert">
